@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,10 +26,10 @@ import (
 )
 
 var BASEFEE = big.NewInt(1 * params.GWei)
-var MINERTIP = big.NewInt(1)
+var MINERTIP = big.NewInt(1 * params.GWei)
 var GAS = uint64(21000)
 var VALUE = big.NewInt(1111111111111111)
-var PARAMS = params.OrchardChainConfig
+var PARAMS = params.LocalChainConfig
 var numChains = 13
 var chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
 var from_zone = 0
@@ -217,7 +218,22 @@ func TestOpETX(t *testing.T) {
 
 }
 
+type AddressCache struct {
+	addresses [][]chan common.Address
+	addrLock  sync.RWMutex
+}
+
 func TestSpamTxs(t *testing.T) {
+	addrCache := &AddressCache{
+		addresses: make([][]chan common.Address, 3),
+	}
+	for i := range addrCache.addresses {
+		addrCache.addresses[i] = make([]chan common.Address, 3)
+		for x := range addrCache.addresses[i] {
+			addrCache.addresses[i][x] = make(chan common.Address, 1000000)
+		}
+	}
+	go GenerateAddresses(addrCache)
 	config, err := util.LoadConfig(".")
 	if err != nil {
 		t.Error("cannot load config: " + err.Error())
@@ -236,33 +252,49 @@ func TestSpamTxs(t *testing.T) {
 		if i%3 == 0 {
 			region++
 		}
-		go func(from_zone int, region int) {
+		addrCache.addresses = append(addrCache.addresses, make([]chan common.Address, 0, 0))
+		go func(from_zone int, region int, addrCache *AddressCache) {
 			if !allClients.zonesAvailable[region][from_zone] {
 				return
 			}
 			client := allClients.zoneClients[region][from_zone]
 			from := allClients.zoneAccounts[region][from_zone]
 			//common.NodeLocation = *from.Address.Location() // Assuming we are in the same location as the provided key
-			toAddr := from.Address
+			var toAddr common.Address
 			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
 			if err != nil {
 				t.Error(err.Error())
 				t.Fail()
 			}
-			start := time.Now()
+			nonceCounter := 0
+			start1 := time.Now()
+			start2 := time.Now()
 			for x := 0; x < 10000000; x++ {
 
 				var tx *types.Transaction
+				if x%1000 == 0 && x != 0 {
+					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
+					if err != nil {
+						t.Error(err.Error())
+						t.Fail()
+					}
+					nonceCounter = 0
+					t.Log("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
+					start2 = time.Now()
+				}
 				if x%5 == 0 {
 					if from_zone == 2 {
-						toAddr = allClients.zoneAccounts[region][(from_zone - 1)].Address
+						toAddr = <-addrCache.addresses[region][from_zone-1]
 					} else {
-						toAddr = allClients.zoneAccounts[region][(from_zone + 1)].Address
+						toAddr = <-addrCache.addresses[region][from_zone+1]
 					}
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(x), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: MINERTIP, Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					// Change the params
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: MINERTIP, Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else {
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(x), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					// Change the params
+					toAddr = <-addrCache.addresses[region][from_zone]
+					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				}
 				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
@@ -277,14 +309,33 @@ func TestSpamTxs(t *testing.T) {
 				}
 				t.Log(tx.Hash().String())
 				time.Sleep(45 * time.Millisecond)
+				nonceCounter++
 			}
-			elapsed := time.Since(start)
-			t.Log("Time elapsed for 100 txs in ms: ", elapsed.Milliseconds())
-		}(from_zone, region)
+			elapsed := time.Since(start1)
+			t.Log("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
+		}(from_zone, region, addrCache)
 	}
 	for {
 	}
 
+}
+
+func GenerateAddresses(addrCache *AddressCache) {
+	for i := 0; i < 100000000; i++ {
+		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+		addr := crypto.PubkeyToAddress(privKey.PublicKey)
+		location := Location(addr)
+		if location == nil {
+			continue
+		}
+		if location.HasZone() {
+			addrCache.addresses[location.Region()][location.Zone()] <- addr
+		}
+	}
 }
 
 func TestHash(t *testing.T) {
@@ -463,4 +514,37 @@ func addAccToClient(clients *orderedBlockClients, acc accounts.Account, i int) {
 	default:
 		fmt.Println("Error adding account to client, chain not found " + fmt.Sprint(i))
 	}
+}
+
+func Location(a common.Address) *common.Location {
+
+	// Search zone->region->prime address spaces in-slice first, and then search
+	// zone->region out-of-slice address spaces next. This minimizes expected
+	// search time under the following assumptions:
+	// * a node is more likely to encounter a TX from its slice than from another
+	// * we expect `>= Z` `zone` TXs for every `region` TX
+	// * we expect `>= R` `region` TXs for every `prime` TX
+	// * (and by extension) we expect `>= R*Z` `zone` TXs for every `prime` TX
+	primeChecked := false
+	for r := 0; r < common.NumRegionsInPrime; r++ {
+		for z := 0; z < common.NumZonesInRegion; z++ {
+			l := common.Location{byte(r), byte(z)}
+			if l.ContainsAddress(a) {
+				return &l
+			}
+		}
+		l := common.Location{byte(r)}
+		if l.ContainsAddress(a) {
+			return &l
+		}
+		// Check prime on first pass through slice, but not again
+		if !primeChecked {
+			primeChecked = true
+			l := common.Location{}
+			if l.ContainsAddress(a) {
+				return &l
+			}
+		}
+	}
+	return nil
 }
