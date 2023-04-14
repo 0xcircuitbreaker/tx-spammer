@@ -1,4 +1,4 @@
-module github.com/dominant-strategies/quai-manager
+module github.com/dominant-strategies/tx-spammer
 
 go 1.19
 
@@ -7,7 +7,7 @@ replace github.com/dominant-strategies/go-quai => ../go-quai
 require (
 	github.com/TwiN/go-color v1.4.0
 	github.com/dominant-strategies/go-quai v0.0.0-20230123213301-d59c57058720
-	github.com/dominant-strategies/quai-accounts v0.0.0-20221018202534-b7e8dff9f664
+	github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310
 	github.com/holiman/uint256 v1.2.0
 	github.com/spf13/viper v1.14.0
 )

@@ -6,15 +6,15 @@ GOBIN = ./build/bin
 GO ?= latest
 GORUN = env GO111MODULE=on go run
 
-quai-manager:
-	go build -o ./build/bin/quai-manager manager/main.go  
+tx-spammer:
+	go build -o ./build/bin/tx-spammer spammer/main.go  
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/manager\" to launch quai-manager"
+	@echo "Run \"$(GOBIN)/tx-spammer\" to launch tx-spammer"
 
 # to run auto-miner without providing a location manually
 # make sure config.yaml file is set up properly
 run:
-	./build/bin/quai-manager 0
+	./build/bin/tx-spammer
 
 # to manually select a location to mine
 run-mine:

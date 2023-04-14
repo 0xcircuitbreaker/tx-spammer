@@ -21,7 +21,7 @@ import (
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
 	accounts "github.com/dominant-strategies/quai-accounts"
 	"github.com/dominant-strategies/quai-accounts/keystore"
-	"github.com/dominant-strategies/quai-manager/manager/util"
+	"github.com/dominant-strategies/tx-spammer/util"
 	"github.com/holiman/uint256"
 )
 
@@ -39,7 +39,7 @@ func TestGenerateAddresses(t *testing.T) {
 	common.NodeLocation = []byte{}
 	fmt.Println("prime")
 
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test123", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
@@ -98,6 +98,108 @@ func TestGenerateAddresses(t *testing.T) {
 				i = 10000
 			}
 		}
+	}
+
+}
+
+type AddressCache struct {
+	addresses [][]chan common.Address
+	addrLock  sync.RWMutex
+}
+
+func TestSpamTxs(t *testing.T) {
+	addrCache := &AddressCache{
+		addresses: make([][]chan common.Address, 3),
+	}
+	for i := range addrCache.addresses {
+		addrCache.addresses[i] = make([]chan common.Address, 3)
+		for x := range addrCache.addresses[i] {
+			addrCache.addresses[i][x] = make(chan common.Address, 1000000)
+		}
+	}
+	go GenerateAddresses(addrCache)
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		t.Error("cannot load config: " + err.Error())
+		t.Fail()
+	}
+	allClients := getNodeClients(config)
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	pass := ""
+	for i := 0; i < 13; i++ {
+		ks.Unlock(ks.Accounts()[i], pass)
+		addAccToClient(&allClients, ks.Accounts()[i], i)
+	}
+	region := -1
+	for i := 0; i < 9; i++ {
+		from_zone = i % 3
+		if i%3 == 0 {
+			region++
+		}
+		addrCache.addresses = append(addrCache.addresses, make([]chan common.Address, 0, 0))
+		go func(from_zone int, region int, addrCache *AddressCache) {
+			if !allClients.zonesAvailable[region][from_zone] {
+				return
+			}
+			client := allClients.zoneClients[region][from_zone]
+			from := allClients.zoneAccounts[region][from_zone]
+			//common.NodeLocation = *from.Address.Location() // Assuming we are in the same location as the provided key
+			var toAddr common.Address
+			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
+			if err != nil {
+				t.Error(err.Error())
+				t.Fail()
+			}
+			nonceCounter := 0
+			start1 := time.Now()
+			start2 := time.Now()
+			for x := 0; x < 10000000; x++ {
+
+				var tx *types.Transaction
+				if x%1000 == 0 && x != 0 {
+					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
+					if err != nil {
+						t.Error(err.Error())
+						t.Fail()
+					}
+					nonceCounter = 0
+					t.Log("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
+					start2 = time.Now()
+				}
+				if x%5 == 0 {
+					if from_zone == 2 {
+						toAddr = <-addrCache.addresses[region][from_zone-1]
+					} else {
+						toAddr = <-addrCache.addresses[region][from_zone+1]
+					}
+					// Change the params
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: big.NewInt(2 * params.GWei), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					tx = types.NewTx(&inner_tx)
+				} else {
+					// Change the params
+					toAddr = <-addrCache.addresses[region][from_zone]
+					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					tx = types.NewTx(&inner_tx)
+				}
+				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
+				if err != nil {
+					t.Error(err.Error())
+					t.Fail()
+				}
+				err = client.SendTransaction(context.Background(), tx)
+				if err != nil {
+					t.Error(err.Error())
+					t.Fail()
+				}
+				t.Log(tx.Hash().String())
+				time.Sleep(45 * time.Millisecond)
+				nonceCounter++
+			}
+			elapsed := time.Since(start1)
+			t.Log("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
+		}(from_zone, region, addrCache)
+	}
+	for {
 	}
 
 }
@@ -214,108 +316,6 @@ func TestOpETX(t *testing.T) {
 			t.Fail()
 		}
 		add++
-	}
-
-}
-
-type AddressCache struct {
-	addresses [][]chan common.Address
-	addrLock  sync.RWMutex
-}
-
-func TestSpamTxs(t *testing.T) {
-	addrCache := &AddressCache{
-		addresses: make([][]chan common.Address, 3),
-	}
-	for i := range addrCache.addresses {
-		addrCache.addresses[i] = make([]chan common.Address, 3)
-		for x := range addrCache.addresses[i] {
-			addrCache.addresses[i][x] = make(chan common.Address, 1000000)
-		}
-	}
-	go GenerateAddresses(addrCache)
-	config, err := util.LoadConfig(".")
-	if err != nil {
-		t.Error("cannot load config: " + err.Error())
-		t.Fail()
-	}
-	allClients := getNodeClients(config)
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
-	pass := ""
-	for i := 0; i < 13; i++ {
-		ks.Unlock(ks.Accounts()[i], pass)
-		addAccToClient(&allClients, ks.Accounts()[i], i)
-	}
-	region := -1
-	for i := 0; i < 9; i++ {
-		from_zone = i % 3
-		if i%3 == 0 {
-			region++
-		}
-		addrCache.addresses = append(addrCache.addresses, make([]chan common.Address, 0, 0))
-		go func(from_zone int, region int, addrCache *AddressCache) {
-			if !allClients.zonesAvailable[region][from_zone] {
-				return
-			}
-			client := allClients.zoneClients[region][from_zone]
-			from := allClients.zoneAccounts[region][from_zone]
-			//common.NodeLocation = *from.Address.Location() // Assuming we are in the same location as the provided key
-			var toAddr common.Address
-			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
-			if err != nil {
-				t.Error(err.Error())
-				t.Fail()
-			}
-			nonceCounter := 0
-			start1 := time.Now()
-			start2 := time.Now()
-			for x := 0; x < 10000000; x++ {
-
-				var tx *types.Transaction
-				if x%1000 == 0 && x != 0 {
-					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
-					if err != nil {
-						t.Error(err.Error())
-						t.Fail()
-					}
-					nonceCounter = 0
-					t.Log("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
-					start2 = time.Now()
-				}
-				if x%5 == 0 {
-					if from_zone == 2 {
-						toAddr = <-addrCache.addresses[region][from_zone-1]
-					} else {
-						toAddr = <-addrCache.addresses[region][from_zone+1]
-					}
-					// Change the params
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: MINERTIP, Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				} else {
-					// Change the params
-					toAddr = <-addrCache.addresses[region][from_zone]
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				}
-				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
-				if err != nil {
-					t.Error(err.Error())
-					t.Fail()
-				}
-				err = client.SendTransaction(context.Background(), tx)
-				if err != nil {
-					t.Error(err.Error())
-					t.Fail()
-				}
-				t.Log(tx.Hash().String())
-				time.Sleep(45 * time.Millisecond)
-				nonceCounter++
-			}
-			elapsed := time.Since(start1)
-			t.Log("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
-		}(from_zone, region, addrCache)
-	}
-	for {
 	}
 
 }

@@ -130,6 +130,8 @@ github.com/dominant-strategies/go-quai v0.0.0-20230123213301-d59c57058720 h1:n17
 github.com/dominant-strategies/go-quai v0.0.0-20230123213301-d59c57058720/go.mod h1:Nc53KCtvsN2OC63EIiRgTeIcGxrCafwr6KdeO0PAAAk=
 github.com/dominant-strategies/quai-accounts v0.0.0-20221018202534-b7e8dff9f664 h1:olkQsGVSBBrKCxgHC5C4+4yTuni2HFkeq+EfQbynAoo=
 github.com/dominant-strategies/quai-accounts v0.0.0-20221018202534-b7e8dff9f664/go.mod h1:muyQZX3IEnbBSZGGmJE0E9iSjy2lF1LE3aejj1n/42s=
+github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310 h1:mlmP1kwvl0U4jYlRM7qw0D/4svwDdOzPIRY0qnweAmU=
+github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310/go.mod h1:muyQZX3IEnbBSZGGmJE0E9iSjy2lF1LE3aejj1n/42s=
 github.com/dop251/goja v0.0.0-20200721192441-a695b0cdd498/go.mod h1:Mw6PkjjMXWbTj+nnj4s3QPXq1jaT0s5pC0iFD4+BOAA=
 github.com/eclipse/paho.mqtt.golang v1.2.0/go.mod h1:H9keYFcgq3Qr5OUJm/JZI/i6U7joQ8SYLhZwfeOo6Ts=
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
