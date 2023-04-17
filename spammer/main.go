@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	random "math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -103,12 +104,8 @@ func SpamTxs() {
 					fmt.Println("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
 					start2 = time.Now()
 				}
-				if x%5 == 0 {
-					if from_zone == 2 {
-						toAddr = <-addrCache.addresses[region][from_zone-1]
-					} else {
-						toAddr = <-addrCache.addresses[region][from_zone+1]
-					}
+				if x%5 == 0 { // Change to true for all ETXs
+					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
 					// Change the params
 					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: big.NewInt(2 * params.GWei), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
@@ -129,13 +126,24 @@ func SpamTxs() {
 					continue
 				}
 				fmt.Println(tx.Hash().String())
-				time.Sleep(45 * time.Millisecond)
+				//time.Sleep(45 * time.Millisecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
 			fmt.Println("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
 		}(from_zone, region, addrCache)
 	}
+}
+
+func ChooseRandomETXAddress(addrCache *AddressCache, region, zone int) common.Address {
+	r, z := random.Intn(3), random.Intn(3)
+	if r == region {
+		return ChooseRandomETXAddress(addrCache, region, zone)
+	} else if z == zone {
+		return ChooseRandomETXAddress(addrCache, region, zone)
+	}
+	toAddr := <-addrCache.addresses[r][z]
+	return toAddr
 }
 
 func GenerateAddresses(addrCache *AddressCache) {
