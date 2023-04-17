@@ -43,7 +43,7 @@ func TestGenerateAddresses(t *testing.T) {
 	common.NodeLocation = []byte{}
 	fmt.Println("prime")
 
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test123", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
@@ -211,6 +211,55 @@ func ChooseRandomETXAddress(addrCache *AddressCache, region, zone int) common.Ad
 	}
 	toAddr := <-addrCache.addresses[r][z]
 	return toAddr
+}
+
+func TestOneTransaction(t *testing.T) {
+
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		t.Error("cannot load config: " + err.Error())
+		t.Fail()
+	}
+	allClients := getNodeClients(config)
+	client := allClients.zoneClients[0][0]
+
+	key, err := crypto.HexToECDSA("private key")
+	if err != nil {
+		t.Error(err.Error())
+		t.Fail()
+	}
+	from := crypto.PubkeyToAddress(key.PublicKey)
+	signer := types.LatestSigner(PARAMS)
+	toAddr := from // change for ETX
+	etx := false   // change for ETX
+
+	nonce, err := client.NonceAt(context.Background(), from, nil)
+	if err != nil {
+		t.Error(err.Error())
+		t.Fail()
+	}
+	var tx *types.Transaction
+
+	if etx {
+		inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: big.NewInt(2 * params.GWei), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+		tx = types.NewTx(&inner_tx)
+	} else {
+		inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+		tx = types.NewTx(&inner_tx)
+	}
+
+	t.Log(tx.Hash().String())
+	tx, err = types.SignTx(tx, signer, key)
+	if err != nil {
+		t.Error(err.Error())
+		t.Fail()
+	}
+	err = client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		t.Error(err.Error())
+		t.Fail()
+	}
+
 }
 
 func TestOpETX(t *testing.T) {

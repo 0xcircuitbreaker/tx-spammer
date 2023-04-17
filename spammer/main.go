@@ -370,7 +370,7 @@ func GenerateKeys() {
 	common.NodeLocation = []byte{}
 	fmt.Println("prime")
 
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test123", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
