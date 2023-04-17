@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	random "math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,14 +26,17 @@ import (
 	"github.com/holiman/uint256"
 )
 
-var BASEFEE = big.NewInt(1 * params.GWei)
-var MINERTIP = big.NewInt(1 * params.GWei)
-var GAS = uint64(21000)
-var VALUE = big.NewInt(1111111111111111)
-var PARAMS = params.LocalChainConfig
-var numChains = 13
-var chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
-var from_zone = 0
+var (
+	BASEFEE   = big.NewInt(1 * params.GWei)
+	MINERTIP  = big.NewInt(1 * params.GWei)
+	GAS       = uint64(21000)
+	VALUE     = big.NewInt(1111111111111111)
+	PARAMS    = params.OrchardChainConfig
+	numChains = 13
+	chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
+	from_zone = 0
+	exit      = make(chan bool)
+)
 
 func TestGenerateAddresses(t *testing.T) {
 	foundAddrs := 0
@@ -120,8 +124,8 @@ func TestSpamTxs(t *testing.T) {
 	go GenerateAddresses(addrCache)
 	config, err := util.LoadConfig(".")
 	if err != nil {
-		t.Error("cannot load config: " + err.Error())
-		t.Fail()
+		fmt.Println("cannot load config: " + err.Error())
+		return
 	}
 	allClients := getNodeClients(config)
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
@@ -147,8 +151,8 @@ func TestSpamTxs(t *testing.T) {
 			var toAddr common.Address
 			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
 			if err != nil {
-				t.Error(err.Error())
-				t.Fail()
+				fmt.Println(err.Error())
+				return
 			}
 			nonceCounter := 0
 			start1 := time.Now()
@@ -159,19 +163,15 @@ func TestSpamTxs(t *testing.T) {
 				if x%1000 == 0 && x != 0 {
 					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
 					if err != nil {
-						t.Error(err.Error())
-						t.Fail()
+						fmt.Println(err.Error())
+						return
 					}
 					nonceCounter = 0
-					t.Log("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
+					fmt.Println("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
 					start2 = time.Now()
 				}
-				if x%5 == 0 {
-					if from_zone == 2 {
-						toAddr = <-addrCache.addresses[region][from_zone-1]
-					} else {
-						toAddr = <-addrCache.addresses[region][from_zone+1]
-					}
+				if x%5 == 0 { // Change to true for all ETXs
+					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
 					// Change the params
 					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: big.NewInt(2 * params.GWei), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
@@ -183,25 +183,34 @@ func TestSpamTxs(t *testing.T) {
 				}
 				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
 				if err != nil {
-					t.Error(err.Error())
-					t.Fail()
+					fmt.Println(err.Error())
+					return
 				}
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
-					t.Error(err.Error())
-					t.Fail()
+					fmt.Println(err.Error())
+					continue
 				}
-				t.Log(tx.Hash().String())
-				time.Sleep(45 * time.Millisecond)
+				fmt.Println(tx.Hash().String())
+				//time.Sleep(45 * time.Millisecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
-			t.Log("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
+			fmt.Println("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
 		}(from_zone, region, addrCache)
 	}
-	for {
-	}
+	<-exit
+}
 
+func ChooseRandomETXAddress(addrCache *AddressCache, region, zone int) common.Address {
+	r, z := random.Intn(3), random.Intn(3)
+	if r == region {
+		return ChooseRandomETXAddress(addrCache, region, zone)
+	} else if z == zone {
+		return ChooseRandomETXAddress(addrCache, region, zone)
+	}
+	toAddr := <-addrCache.addresses[r][z]
+	return toAddr
 }
 
 func TestOpETX(t *testing.T) {
