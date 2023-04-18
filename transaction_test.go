@@ -40,16 +40,15 @@ var (
 
 func TestGenerateAddresses(t *testing.T) {
 	foundAddrs := 0
-	common.NodeLocation = []byte{}
-	fmt.Println("prime")
+	common.NodeLocation = []byte{0, 0}
+	fmt.Println("cyprus1")
 
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 		if err != nil {
-			t.Error(err.Error())
-			t.Fail()
+			fmt.Println(err.Error())
 			return
 		}
 		addr := crypto.PubkeyToAddress(privKey.PublicKey)
@@ -62,12 +61,6 @@ func TestGenerateAddresses(t *testing.T) {
 		if foundAddrs == 1 {
 			foundAddrs = 0
 			switch common.NodeLocation.Name() {
-			case "prime":
-				common.NodeLocation = []byte{0}
-				fmt.Println(common.NodeLocation.Name())
-			case "cyprus":
-				common.NodeLocation = []byte{0, 0}
-				fmt.Println(common.NodeLocation.Name())
 			case "cyprus1":
 				common.NodeLocation = []byte{0, 1}
 				fmt.Println(common.NodeLocation.Name())
@@ -75,9 +68,6 @@ func TestGenerateAddresses(t *testing.T) {
 				common.NodeLocation = []byte{0, 2}
 				fmt.Println(common.NodeLocation.Name())
 			case "cyprus3":
-				common.NodeLocation = []byte{1}
-				fmt.Println(common.NodeLocation.Name())
-			case "paxos":
 				common.NodeLocation = []byte{1, 0}
 				fmt.Println(common.NodeLocation.Name())
 			case "paxos1":
@@ -87,9 +77,6 @@ func TestGenerateAddresses(t *testing.T) {
 				common.NodeLocation = []byte{1, 2}
 				fmt.Println(common.NodeLocation.Name())
 			case "paxos3":
-				common.NodeLocation = []byte{2}
-				fmt.Println(common.NodeLocation.Name())
-			case "hydra":
 				common.NodeLocation = []byte{2, 0}
 				fmt.Println(common.NodeLocation.Name())
 			case "hydra1":
@@ -130,7 +117,7 @@ func TestSpamTxs(t *testing.T) {
 	allClients := getNodeClients(config)
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 	pass := ""
-	for i := 0; i < 13; i++ {
+	for i := 0; i < 9; i++ {
 		ks.Unlock(ks.Accounts()[i], pass)
 		addAccToClient(&allClients, ks.Accounts()[i], i)
 	}

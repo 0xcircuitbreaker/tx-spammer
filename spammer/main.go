@@ -64,7 +64,7 @@ func SpamTxs() {
 	allClients := getNodeClients(config)
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 	pass := ""
-	for i := 0; i < 13; i++ {
+	for i := 0; i < 9; i++ {
 		ks.Unlock(ks.Accounts()[i], pass)
 		addAccToClient(&allClients, ks.Accounts()[i], i)
 	}
@@ -250,85 +250,61 @@ func getNodeClients(config util.Config) orderedBlockClients {
 func addAccToClient(clients *orderedBlockClients, acc accounts.Account, i int) {
 	switch i {
 	case 0:
-		common.NodeLocation = []byte{}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
-		}
-		clients.primeAccount = acc
-	case 1:
-		common.NodeLocation = []byte{0}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
-		}
-		clients.regionAccounts[0] = acc
-	case 2:
 		common.NodeLocation = []byte{0, 0}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[0][0] = acc
-	case 3:
+	case 1:
 		common.NodeLocation = []byte{0, 1}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[0][1] = acc
-	case 4:
+	case 2:
 		common.NodeLocation = []byte{0, 2}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[0][2] = acc
-	case 5:
-		common.NodeLocation = []byte{1}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
-		}
-		clients.regionAccounts[1] = acc
-	case 6:
+	case 3:
 		common.NodeLocation = []byte{1, 0}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[1][0] = acc
-	case 7:
+	case 4:
 		common.NodeLocation = []byte{1, 1}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[1][1] = acc
-	case 8:
+	case 5:
 		common.NodeLocation = []byte{1, 2}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[1][2] = acc
-	case 9:
-		common.NodeLocation = []byte{2}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
-		}
-		clients.regionAccounts[2] = acc
-	case 10:
+	case 6:
 		common.NodeLocation = []byte{2, 0}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[2][0] = acc
-	case 11:
+	case 7:
 		common.NodeLocation = []byte{2, 1}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[2][1] = acc
-	case 12:
+	case 8:
 		common.NodeLocation = []byte{2, 2}
 		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope")
+			panic("Account not in chain scope" + acc.Address.String())
 		}
 		clients.zoneAccounts[2][2] = acc
 	default:
-		fmt.Println("Error adding account to client, chain not found " + fmt.Sprint(i))
+		panic("Error adding account to client, chain not found " + fmt.Sprint(i) + acc.Address.String())
 	}
 }
 
@@ -367,8 +343,8 @@ func Location(a common.Address) *common.Location {
 
 func GenerateKeys() {
 	foundAddrs := 0
-	common.NodeLocation = []byte{}
-	fmt.Println("prime")
+	common.NodeLocation = []byte{0, 0}
+	fmt.Println("cyprus1")
 
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 
@@ -388,12 +364,6 @@ func GenerateKeys() {
 		if foundAddrs == 1 {
 			foundAddrs = 0
 			switch common.NodeLocation.Name() {
-			case "prime":
-				common.NodeLocation = []byte{0}
-				fmt.Println(common.NodeLocation.Name())
-			case "cyprus":
-				common.NodeLocation = []byte{0, 0}
-				fmt.Println(common.NodeLocation.Name())
 			case "cyprus1":
 				common.NodeLocation = []byte{0, 1}
 				fmt.Println(common.NodeLocation.Name())
@@ -401,9 +371,6 @@ func GenerateKeys() {
 				common.NodeLocation = []byte{0, 2}
 				fmt.Println(common.NodeLocation.Name())
 			case "cyprus3":
-				common.NodeLocation = []byte{1}
-				fmt.Println(common.NodeLocation.Name())
-			case "paxos":
 				common.NodeLocation = []byte{1, 0}
 				fmt.Println(common.NodeLocation.Name())
 			case "paxos1":
@@ -413,9 +380,6 @@ func GenerateKeys() {
 				common.NodeLocation = []byte{1, 2}
 				fmt.Println(common.NodeLocation.Name())
 			case "paxos3":
-				common.NodeLocation = []byte{2}
-				fmt.Println(common.NodeLocation.Name())
-			case "hydra":
 				common.NodeLocation = []byte{2, 0}
 				fmt.Println(common.NodeLocation.Name())
 			case "hydra1":
