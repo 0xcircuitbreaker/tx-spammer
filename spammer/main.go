@@ -123,10 +123,10 @@ func SpamTxs() {
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
 					fmt.Println(err.Error())
-					continue
+				} else {
+					fmt.Println(tx.Hash().String())
 				}
-				fmt.Println(tx.Hash().String())
-				//time.Sleep(45 * time.Millisecond)
+				//time.Sleep(5 * time.Second)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
