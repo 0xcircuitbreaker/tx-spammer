@@ -9,7 +9,6 @@ import (
 	random "math/rand"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -28,8 +27,6 @@ var (
 	GAS       = uint64(21000)
 	VALUE     = big.NewInt(1111111111111111)
 	PARAMS    = params.GardenChainConfig
-	numChains = 13
-	chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
 	from_zone = 0
 	exit      = make(chan bool)
 )
@@ -42,7 +39,6 @@ func main() {
 
 type AddressCache struct {
 	addresses [][]chan common.Address
-	addrLock  sync.RWMutex
 }
 
 func SpamTxs() {
@@ -166,10 +162,8 @@ func GenerateAddresses(addrCache *AddressCache) {
 type orderedBlockClients struct {
 	primeClient      *ethclient.Client
 	primeAvailable   bool
-	primeAccount     accounts.Account
 	regionClients    []*ethclient.Client
 	regionsAvailable []bool
-	regionAccounts   []accounts.Account
 	zoneClients      [][]*ethclient.Client
 	zonesAvailable   [][]bool
 	zoneAccounts     [][]accounts.Account
@@ -184,7 +178,6 @@ func getNodeClients(config util.Config) orderedBlockClients {
 		primeAvailable:   false,
 		regionClients:    make([]*ethclient.Client, 3),
 		regionsAvailable: make([]bool, 3),
-		regionAccounts:   make([]accounts.Account, 3),
 		zoneClients:      make([][]*ethclient.Client, 3),
 		zonesAvailable:   make([][]bool, 3),
 		zoneAccounts:     make([][]accounts.Account, 3),
@@ -340,11 +333,16 @@ func Location(a common.Address) *common.Location {
 }
 
 func GenerateKeys() {
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	if len(ks.Accounts()) > 0 {
+		fmt.Println("Already have keys, please delete the .test directory if you want to generate new keys")
+		return
+	}
+
 	foundAddrs := 0
 	common.NodeLocation = []byte{0, 0}
 	fmt.Println("cyprus1")
-
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	addrs := make([]common.Address, 0)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
@@ -357,6 +355,7 @@ func GenerateKeys() {
 			fmt.Println(addr.Hex())
 			fmt.Println(crypto.FromECDSA(privKey))
 			ks.ImportECDSA(privKey, "")
+			addrs = append(addrs, addr)
 			foundAddrs++
 		}
 		if foundAddrs == 1 {
@@ -391,5 +390,15 @@ func GenerateKeys() {
 			}
 		}
 	}
+
+	fmt.Println("ZONE_0_0_COINBASE=" + addrs[0].String())
+	fmt.Println("ZONE_0_1_COINBASE=" + addrs[1].String())
+	fmt.Println("ZONE_0_2_COINBASE=" + addrs[2].String())
+	fmt.Println("ZONE_1_0_COINBASE=" + addrs[3].String())
+	fmt.Println("ZONE_1_1_COINBASE=" + addrs[4].String())
+	fmt.Println("ZONE_1_2_COINBASE=" + addrs[5].String())
+	fmt.Println("ZONE_2_0_COINBASE=" + addrs[6].String())
+	fmt.Println("ZONE_2_1_COINBASE=" + addrs[7].String())
+	fmt.Println("ZONE_2_2_COINBASE=" + addrs[8].String())
 
 }

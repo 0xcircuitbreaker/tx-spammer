@@ -39,11 +39,16 @@ var (
 )
 
 func TestGenerateAddresses(t *testing.T) {
+	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	if len(ks.Accounts()) > 0 {
+		fmt.Println("Already have keys, please delete the .test directory if you want to generate new keys")
+		return
+	}
+
 	foundAddrs := 0
 	common.NodeLocation = []byte{0, 0}
 	fmt.Println("cyprus1")
-
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
+	addrs := make([]common.Address, 0)
 
 	for i := 0; i < 10000; i++ {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
@@ -56,6 +61,7 @@ func TestGenerateAddresses(t *testing.T) {
 			fmt.Println(addr.Hex())
 			fmt.Println(crypto.FromECDSA(privKey))
 			ks.ImportECDSA(privKey, "")
+			addrs = append(addrs, addr)
 			foundAddrs++
 		}
 		if foundAddrs == 1 {
@@ -90,6 +96,15 @@ func TestGenerateAddresses(t *testing.T) {
 			}
 		}
 	}
+	fmt.Println("ZONE_0_0_COINBASE=" + addrs[0].String())
+	fmt.Println("ZONE_0_1_COINBASE=" + addrs[1].String())
+	fmt.Println("ZONE_0_2_COINBASE=" + addrs[2].String())
+	fmt.Println("ZONE_1_0_COINBASE=" + addrs[3].String())
+	fmt.Println("ZONE_1_1_COINBASE=" + addrs[4].String())
+	fmt.Println("ZONE_1_2_COINBASE=" + addrs[5].String())
+	fmt.Println("ZONE_2_0_COINBASE=" + addrs[6].String())
+	fmt.Println("ZONE_2_1_COINBASE=" + addrs[7].String())
+	fmt.Println("ZONE_2_2_COINBASE=" + addrs[8].String())
 
 }
 
