@@ -27,7 +27,7 @@ var (
 	MINERTIP  = big.NewInt(1 * params.GWei)
 	GAS       = uint64(21000)
 	VALUE     = big.NewInt(1111111111111111)
-	PARAMS    = params.OrchardChainConfig
+	PARAMS    = params.GardenChainConfig
 	numChains = 13
 	chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
 	from_zone = 0
@@ -123,10 +123,8 @@ func SpamTxs() {
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
 					fmt.Println(err.Error())
-				} else {
-					fmt.Println(tx.Hash().String())
 				}
-				//time.Sleep(5 * time.Second)
+				time.Sleep(2 * time.Second)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
