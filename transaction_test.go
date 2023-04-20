@@ -31,8 +31,7 @@ var (
 	MINERTIP  = big.NewInt(1 * params.GWei)
 	GAS       = uint64(21000)
 	VALUE     = big.NewInt(1111111111111111)
-	PARAMS    = params.OrchardChainConfig
-	numChains = 13
+	PARAMS    = params.GardenChainConfig
 	chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
 	from_zone = 0
 	exit      = make(chan bool)
@@ -149,7 +148,7 @@ func TestSpamTxs(t *testing.T) {
 			}
 			client := allClients.zoneClients[region][from_zone]
 			from := allClients.zoneAccounts[region][from_zone]
-			//common.NodeLocation = *from.Address.Location() // Assuming we are in the same location as the provided key
+
 			var toAddr common.Address
 			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
 			if err != nil {

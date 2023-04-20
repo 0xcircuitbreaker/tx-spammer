@@ -26,7 +26,7 @@ var (
 	MINERTIP  = big.NewInt(1 * params.GWei)
 	GAS       = uint64(21000)
 	VALUE     = big.NewInt(1111111111111111)
-	PARAMS    = params.GardenChainConfig
+	PARAMS    = params.OrchardChainConfig
 	from_zone = 0
 	exit      = make(chan bool)
 )
@@ -77,7 +77,7 @@ func SpamTxs() {
 			}
 			client := allClients.zoneClients[region][from_zone]
 			from := allClients.zoneAccounts[region][from_zone]
-			//common.NodeLocation = *from.Address.Location() // Assuming we are in the same location as the provided key
+
 			var toAddr common.Address
 			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
 			if err != nil {
@@ -87,8 +87,7 @@ func SpamTxs() {
 			nonceCounter := 0
 			start1 := time.Now()
 			start2 := time.Now()
-			for x := 0; x < 10000000; x++ {
-
+			for x := 0; true; x++ {
 				var tx *types.Transaction
 				if x%1000 == 0 && x != 0 {
 					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
@@ -120,7 +119,7 @@ func SpamTxs() {
 				if err != nil {
 					fmt.Println(err.Error())
 				}
-				time.Sleep(2 * time.Second)
+				time.Sleep(500 * time.Millisecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
@@ -141,7 +140,7 @@ func ChooseRandomETXAddress(addrCache *AddressCache, region, zone int) common.Ad
 }
 
 func GenerateAddresses(addrCache *AddressCache) {
-	for i := 0; i < 100000000; i++ {
+	for {
 		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 		if err != nil {
 			fmt.Println(err.Error())
