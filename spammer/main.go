@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"fmt"
+	"math"
 	"math/big"
 	random "math/rand"
 	"os"
@@ -25,10 +26,11 @@ var (
 	BASEFEE   = big.NewInt(1 * params.GWei)
 	MINERTIP  = big.NewInt(1 * params.GWei)
 	GAS       = uint64(21000)
-	VALUE     = big.NewInt(1111111111111111)
+	VALUE     = big.NewInt(1)
 	PARAMS    = params.OrchardChainConfig
 	from_zone = 0
 	exit      = make(chan bool)
+	timeouts  = []time.Duration{150000, 100000, 75000, 60000, 50000, 42850, 37500, 33333}
 )
 
 func main() {
@@ -119,7 +121,14 @@ func SpamTxs() {
 				if err != nil {
 					fmt.Println(err.Error())
 				}
-				time.Sleep(500 * time.Millisecond)
+				fmt.Println(int(math.Floor(time.Since(start1).Hours() / 6)))
+				index := int(math.Floor(time.Since(start1).Hours() / 6))
+				if index >= len(timeouts) {
+					index = len(timeouts) - 1
+				}
+
+				sleepTime := timeouts[index]
+				time.Sleep(sleepTime * time.Microsecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
