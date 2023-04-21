@@ -150,7 +150,7 @@ func TestSpamTxs(t *testing.T) {
 			from := allClients.zoneAccounts[region][from_zone]
 
 			var toAddr common.Address
-			nonce, err := client.NonceAt(context.Background(), from.Address, nil)
+			nonce, err := client.PendingNonceAt(context.Background(), from.Address)
 			if err != nil {
 				fmt.Println(err.Error())
 				return
