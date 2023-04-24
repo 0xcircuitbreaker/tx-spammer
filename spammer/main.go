@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	BASEFEE   = big.NewInt(1 * params.GWei)
-	MINERTIP  = big.NewInt(1 * params.GWei)
+	MAXFEE    = big.NewInt(4 * params.GWei)
+	MINERTIP  = big.NewInt(2 * params.GWei)
 	GAS       = uint64(21000)
 	VALUE     = big.NewInt(1111111111111111)
 	PARAMS    = params.OrchardChainConfig
@@ -65,7 +65,7 @@ func SpamTxs() {
 		addAccToClient(&allClients, ks.Accounts()[i], i)
 	}
 	region := -1
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 1; i++ {
 		from_zone = i % 3
 		if i%3 == 0 {
 			region++
@@ -84,6 +84,10 @@ func SpamTxs() {
 				fmt.Println(err.Error())
 				return
 			}
+			balance, _ := client.BalanceAt(context.Background(), from.Address, nil)
+			fmt.Println("address: ", from.Address.String())
+			//temp, _ := big.NewFloat(10e18).Int(nil)
+			fmt.Println("Balance: ", balance.String())
 			nonceCounter := 0
 			start1 := time.Now()
 			start2 := time.Now()
@@ -102,12 +106,12 @@ func SpamTxs() {
 				if x%5 == 0 { // Change to true for all ETXs
 					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
 					// Change the params
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, ETXGasPrice: big.NewInt(2 * params.GWei), ETXGasLimit: 21000, ETXGasTip: big.NewInt(2 * params.GWei), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else {
 					// Change the params
 					toAddr = <-addrCache.addresses[region][from_zone]
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: BASEFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				}
 				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
@@ -119,7 +123,7 @@ func SpamTxs() {
 				if err != nil {
 					fmt.Println(err.Error())
 				}
-				time.Sleep(500 * time.Millisecond)
+				//time.Sleep(500 * time.Millisecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
