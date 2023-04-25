@@ -25,7 +25,7 @@ var (
 	MAXFEE    = big.NewInt(4 * params.GWei)
 	MINERTIP  = big.NewInt(2 * params.GWei)
 	GAS       = uint64(21000)
-	VALUE     = big.NewInt(1111111111111111)
+	VALUE     = big.NewInt(1)
 	PARAMS    = params.OrchardChainConfig
 	from_zone = 0
 	exit      = make(chan bool)
@@ -65,7 +65,7 @@ func SpamTxs() {
 		addAccToClient(&allClients, ks.Accounts()[i], i)
 	}
 	region := -1
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 9; i++ {
 		from_zone = i % 3
 		if i%3 == 0 {
 			region++
@@ -123,7 +123,7 @@ func SpamTxs() {
 				if err != nil {
 					fmt.Println(err.Error())
 				}
-				//time.Sleep(500 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 				nonceCounter++
 			}
 			elapsed := time.Since(start1)
