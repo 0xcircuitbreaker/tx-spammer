@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	random "math/rand"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/params"
@@ -19,31 +22,174 @@ import (
 	accounts "github.com/dominant-strategies/quai-accounts"
 	"github.com/dominant-strategies/quai-accounts/keystore"
 	"github.com/dominant-strategies/tx-spammer/util"
+	"github.com/sasha-s/go-deadlock"
 )
 
 var (
-	MAXFEE    = big.NewInt(4 * params.GWei)
-	MINERTIP  = big.NewInt(2 * params.GWei)
-	GAS       = uint64(21000)
-	VALUE     = big.NewInt(1)
-	PARAMS    = params.OrchardChainConfig
-	from_zone = 0
-	exit      = make(chan bool)
+	MAXFEE   = big.NewInt(4 * params.GWei)
+	MINERTIP = big.NewInt(2 * params.GWei)
+	GAS      = uint64(21000)
+	VALUE    = big.NewInt(1)
+	// Change the params to the proper chain config
+	PARAMS          = params.OrchardChainConfig
+	WALLETSPERBLOCK = 160
+	exit            = make(chan bool)
 )
 
+type wallet struct {
+	Address    string `json:"address"`
+	Index      int    `json:"index"`
+	Path       string `json:"path"`
+	PrivateKey string `json:"privateKey"`
+}
+
 func main() {
+	group := os.Args[1]
+	jsonFile, err := os.Open("wallets.json")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer jsonFile.Close()
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+	var result map[string]map[string][]wallet
+	err = json.Unmarshal(byteValue, &result)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	//addresses_0 := result["group-"+group]["zone-0-0"]
+	//fmt.Printf("addresses_0: %v\n", addresses_0)
 	//GenerateKeys()
-	SpamTxs()
+	SpamTxs(result, group)
+	//GeneratePrivKeyAndSpam()
 	<-exit
 }
 
 type AddressCache struct {
 	addresses [][]chan common.Address
+	privKeys  [][]chan ecdsa.PrivateKey
 }
 
-func SpamTxs() {
+func SpamTxs(wallets map[string]map[string][]wallet, group string) {
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		fmt.Println("cannot load config: " + err.Error())
+		return
+	}
+	allClients := getNodeClients(config)
+	region := -1
+	for i := 0; i < 9; i++ {
+		from_zone := i % 3
+		if i%3 == 0 {
+			region++
+		}
+
+		go func(from_zone int, region int) {
+			if !allClients.zonesAvailable[region][from_zone] {
+				return
+			}
+			client := allClients.zoneClients[region][from_zone]
+			signer := types.LatestSigner(PARAMS)
+			zoneWallets := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", region, from_zone)]
+			walletIndex := 0
+			walletsPerBlock := WALLETSPERBLOCK
+			txsSent := 0
+			nonces := make(map[common.AddressBytes]uint64)
+
+			start := time.Now()
+			walkUpTime := time.Now()
+			for x := 0; true; x++ {
+				fromAddr := common.HexToAddress(zoneWallets[walletIndex].Address)
+				fromPrivKey, err := crypto.ToECDSA(common.FromHex(zoneWallets[walletIndex].PrivateKey))
+				if err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+				if _, exists := nonces[fromAddr.Bytes20()]; !exists {
+					nonce, err := client.PendingNonceAt(context.Background(), fromAddr)
+					if err != nil {
+						fmt.Println(err.Error())
+						if walletIndex < len(zoneWallets)-1 {
+							walletIndex++
+						} else {
+							walletIndex = 0
+						}
+						continue // try the next wallet
+					}
+					nonces[fromAddr.Bytes20()] = nonce
+				}
+				nonce := nonces[fromAddr.Bytes20()]
+				var toAddr common.Address
+				var tx *types.Transaction
+				if x%5 == 0 { // Change to true for all ETXs
+					otherZone := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", region, (from_zone+1)%3)] // Cross Region
+					toAddr = common.HexToAddress(otherZone[len(zoneWallets)-1-walletIndex].Address)
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					tx = types.NewTx(&inner_tx)
+				} else if x%9 == 0 {
+					otherRegion := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", (region+1)%3, (from_zone+1)%3)] // Cross Prime
+					toAddr = common.HexToAddress(otherRegion[len(zoneWallets)-1-walletIndex].Address)
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					tx = types.NewTx(&inner_tx)
+				} else {
+					toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
+					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					tx = types.NewTx(&inner_tx)
+				}
+				tx, err = types.SignTx(tx, signer, fromPrivKey)
+				if err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+				err = client.SendTransaction(context.Background(), tx)
+				if err != nil {
+					fmt.Println(err.Error())
+					if err == core.ErrReplaceUnderpriced || err == core.ErrNonceTooLow {
+						nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
+						continue                     // do not increment walletIndex, try again with the same wallet
+					} else if err == core.ErrInsufficientFunds {
+						if walletIndex < len(zoneWallets)-1 {
+							walletIndex++
+						} else {
+							walletIndex = 0
+						}
+						continue // try the next wallet
+					}
+				}
+				if walletIndex < len(zoneWallets)-1 {
+					walletIndex++
+				} else {
+					walletIndex = 0
+				}
+				txsSent++
+				nonces[fromAddr.Bytes20()]++
+				if txsSent%walletsPerBlock == 0 && walletIndex != 0 { // not perfect math in the case that walletIndex wraps around to zero
+					elapsed := time.Since(start)
+					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Time elapsed for %d txs: %d ms\n", walletsPerBlock, elapsed.Milliseconds())
+					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": TPS: %f\n", float64(walletsPerBlock)/elapsed.Seconds())
+					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Txs Sent: %d\n", txsSent)
+					start = time.Now()
+					sleepyTime := (10 * time.Second) - elapsed
+					if sleepyTime < 0 {
+						sleepyTime = 0
+					}
+					time.Sleep(sleepyTime)
+				}
+				if time.Since(walkUpTime) >= 100*time.Second && int(float64(walletsPerBlock)*1.1) < len(zoneWallets) {
+					walletsPerBlock = int(float64(walletsPerBlock) * 1.1)
+					walkUpTime = time.Now()
+				}
+
+			}
+		}(from_zone, region)
+	}
+}
+
+func GeneratePrivKeyAndSpam() {
 	addrCache := &AddressCache{
 		addresses: make([][]chan common.Address, 3),
+		privKeys:  make([][]chan ecdsa.PrivateKey, 3),
 	}
 	for i := range addrCache.addresses {
 		addrCache.addresses[i] = make([]chan common.Address, 3)
@@ -51,22 +197,24 @@ func SpamTxs() {
 			addrCache.addresses[i][x] = make(chan common.Address, 1000000)
 		}
 	}
+	for i := range addrCache.privKeys {
+		addrCache.privKeys[i] = make([]chan ecdsa.PrivateKey, 3)
+		for x := range addrCache.privKeys[i] {
+			addrCache.privKeys[i][x] = make(chan ecdsa.PrivateKey, 1000000)
+		}
+	}
 	go GenerateAddresses(addrCache)
+	time.Sleep(time.Second * 5)
 	config, err := util.LoadConfig(".")
 	if err != nil {
 		fmt.Println("cannot load config: " + err.Error())
 		return
 	}
 	allClients := getNodeClients(config)
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
-	pass := ""
-	for i := 0; i < 9; i++ {
-		ks.Unlock(ks.Accounts()[i], pass)
-		addAccToClient(&allClients, ks.Accounts()[i], i)
-	}
+
 	region := -1
-	for i := 0; i < 9; i++ {
-		from_zone = i % 3
+	for i := 0; i < 1; i++ {
+		from_zone := i % 3
 		if i%3 == 0 {
 			region++
 		}
@@ -76,45 +224,30 @@ func SpamTxs() {
 				return
 			}
 			client := allClients.zoneClients[region][from_zone]
-			from := allClients.zoneAccounts[region][from_zone]
-
+			signer := types.LatestSigner(PARAMS)
 			var toAddr common.Address
-			nonce, err := client.PendingNonceAt(context.Background(), from.Address)
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-			balance, _ := client.BalanceAt(context.Background(), from.Address, nil)
-			fmt.Println("address: ", from.Address.String())
-			//temp, _ := big.NewFloat(10e18).Int(nil)
-			fmt.Println("Balance: ", balance.String())
-			nonceCounter := 0
 			start1 := time.Now()
 			start2 := time.Now()
 			for x := 0; true; x++ {
+				fromKey := <-addrCache.privKeys[region][from_zone]
 				var tx *types.Transaction
 				if x%1000 == 0 && x != 0 {
-					nonce, err = client.PendingNonceAt(context.Background(), from.Address)
-					if err != nil {
-						fmt.Println(err.Error())
-						return
-					}
-					nonceCounter = 0
 					fmt.Println("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
 					start2 = time.Now()
 				}
 				if x%5 == 0 { // Change to true for all ETXs
 					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
 					// Change the params
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else {
 					// Change the params
 					toAddr = <-addrCache.addresses[region][from_zone]
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + uint64(nonceCounter), GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					toAddr = <-addrCache.addresses[region][from_zone] // twice so we don't send to the same address
+					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				}
-				tx, err = ks.SignTx(from, tx, PARAMS.ChainID)
+				tx, err = types.SignTx(tx, signer, &fromKey)
 				if err != nil {
 					fmt.Println(err.Error())
 					return
@@ -123,8 +256,7 @@ func SpamTxs() {
 				if err != nil {
 					fmt.Println(err.Error())
 				}
-				time.Sleep(50 * time.Millisecond)
-				nonceCounter++
+				time.Sleep(5000 * time.Millisecond)
 			}
 			elapsed := time.Since(start1)
 			fmt.Println("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
@@ -157,6 +289,7 @@ func GenerateAddresses(addrCache *AddressCache) {
 		}
 		if location.HasZone() {
 			addrCache.addresses[location.Region()][location.Zone()] <- addr
+			addrCache.privKeys[location.Region()][location.Zone()] <- *privKey
 		}
 	}
 }
@@ -170,6 +303,8 @@ type orderedBlockClients struct {
 	zoneClients      [][]*ethclient.Client
 	zonesAvailable   [][]bool
 	zoneAccounts     [][]accounts.Account
+	zoneWallets      [][]wallet
+	walletLock       deadlock.RWMutex
 }
 
 // getNodeClients takes in a config and retrieves the Prime, Region, and Zone client

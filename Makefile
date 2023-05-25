@@ -14,7 +14,7 @@ tx-spammer:
 # to run auto-miner without providing a location manually
 # make sure config.yaml file is set up properly
 run:
-	./build/bin/tx-spammer
+	./build/bin/tx-spammer $(group)
 
 # to manually select a location to mine
 run-mine:
