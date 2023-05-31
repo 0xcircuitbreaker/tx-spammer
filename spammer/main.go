@@ -31,9 +31,10 @@ var (
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS          = params.LocalChainConfig
-	WALLETSPERBLOCK = 160
-	exit            = make(chan bool)
+	PARAMS           = params.LocalChainConfig
+	WALLETSPERBLOCK  = 160
+	enableSleepPerTx = true
+	exit             = make(chan bool)
 )
 
 type wallet struct {
@@ -162,6 +163,10 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 						time.Sleep(time.Second * time.Duration(errCount))
 					}
 				} else {
+					if enableSleepPerTx {
+						random := random.Intn(2)
+						time.Sleep(time.Millisecond * 10 * time.Duration(random))
+					}
 					errCount = 0
 				}
 				if walletIndex < len(zoneWallets)-1 {
