@@ -31,7 +31,7 @@ var (
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS          = params.OrchardChainConfig
+	PARAMS          = params.LocalChainConfig
 	WALLETSPERBLOCK = 160
 	exit            = make(chan bool)
 )
@@ -79,7 +79,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 	}
 	allClients := getNodeClients(config)
 	region := -1
-	for i := 0; i < 9; i++ {
+	for i := 0; i < 3; i++ {
 		from_zone := i % 3
 		if i%3 == 0 {
 			region++
@@ -96,6 +96,8 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 			walletsPerBlock := WALLETSPERBLOCK
 			txsSent := 0
 			nonces := make(map[common.AddressBytes]uint64)
+
+			errCount := 0
 
 			start := time.Now()
 			walkUpTime := time.Now()
@@ -144,7 +146,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				}
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
-					fmt.Println(err.Error())
+					fmt.Printf("zone-" + fmt.Sprintf("%d-%d", region, from_zone) + ": " + err.Error() + "\n")
 					if err == core.ErrReplaceUnderpriced || err == core.ErrNonceTooLow {
 						nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
 						continue                     // do not increment walletIndex, try again with the same wallet
@@ -155,7 +157,12 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 							walletIndex = 0
 						}
 						continue // try the next wallet
+					} else {
+						errCount++
+						time.Sleep(time.Second * time.Duration(errCount))
 					}
+				} else {
+					errCount = 0
 				}
 				if walletIndex < len(zoneWallets)-1 {
 					walletIndex++
