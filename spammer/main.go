@@ -31,10 +31,13 @@ var (
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS           = params.LocalChainConfig
-	WALLETSPERBLOCK  = 160
-	enableSleepPerTx = true
-	exit             = make(chan bool)
+	PARAMS             = params.LocalChainConfig
+	WALLETSPERBLOCK    = 160
+	NUMZONES           = 9
+	enableSleepPerTx   = true
+	startingSleepPerTx = 20 * time.Millisecond
+	targetTPS          = 30
+	exit               = make(chan bool)
 )
 
 type wallet struct {
@@ -80,7 +83,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 	}
 	allClients := getNodeClients(config)
 	region := -1
-	for i := 0; i < 3; i++ {
+	for i := 0; i < NUMZONES; i++ {
 		from_zone := i % 3
 		if i%3 == 0 {
 			region++
@@ -97,8 +100,9 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 			walletsPerBlock := WALLETSPERBLOCK
 			txsSent := 0
 			nonces := make(map[common.AddressBytes]uint64)
-
+			sleepPerTx := startingSleepPerTx
 			errCount := 0
+			shouldWalkUp := true
 
 			start := time.Now()
 			walkUpTime := time.Now()
@@ -164,8 +168,8 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 					}
 				} else {
 					if enableSleepPerTx {
-						random := random.Intn(2)
-						time.Sleep(time.Millisecond * 10 * time.Duration(random))
+						randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
+						time.Sleep(time.Duration(randomNanoseconds * 2))
 					}
 					errCount = 0
 				}
@@ -176,19 +180,31 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				}
 				txsSent++
 				nonces[fromAddr.Bytes20()]++
+
 				if txsSent%walletsPerBlock == 0 && walletIndex != 0 { // not perfect math in the case that walletIndex wraps around to zero
 					elapsed := time.Since(start)
+					tps := float64(walletsPerBlock) / elapsed.Seconds()
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Time elapsed for %d txs: %d ms\n", walletsPerBlock, elapsed.Milliseconds())
-					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": TPS: %f\n", float64(walletsPerBlock)/elapsed.Seconds())
+					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": TPS: %f\n", tps)
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Txs Sent: %d\n", txsSent)
+
+					tpsInNS := float64(walletsPerBlock) / float64(elapsed.Nanoseconds())
+					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) * (tpsInNS / float64(float64(targetTPS)/1e9)) // newSleep = oldSleep * (tps / targetTPS)
+					sleepPerTx = time.Duration(newSleepBasedOnCalcTPS)
+					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
 					start = time.Now()
-					sleepyTime := (10 * time.Second) - elapsed
+					/*sleepyTime := (10 * time.Second) - elapsed
 					if sleepyTime < 0 {
 						sleepyTime = 0
 					}
-					time.Sleep(sleepyTime)
+					time.Sleep(sleepyTime)*/
+					if tps > float64(targetTPS) {
+						shouldWalkUp = false
+					} else {
+						shouldWalkUp = true
+					}
 				}
-				if time.Since(walkUpTime) >= 100*time.Second && int(float64(walletsPerBlock)*1.1) < len(zoneWallets) {
+				if time.Since(walkUpTime) >= 100*time.Second && int(float64(walletsPerBlock)*1.1) < len(zoneWallets) && shouldWalkUp {
 					walletsPerBlock = int(float64(walletsPerBlock) * 1.1)
 					walkUpTime = time.Now()
 				}
