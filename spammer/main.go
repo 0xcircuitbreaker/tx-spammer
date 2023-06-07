@@ -32,7 +32,7 @@ var (
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
 	PARAMS             = params.LocalChainConfig
-	WALLETSPERBLOCK    = 160
+	WALLETSPERBLOCK    = 640
 	NUMZONES           = 9
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
