@@ -6,7 +6,7 @@ replace github.com/dominant-strategies/go-quai => ../go-quai
 
 require (
 	github.com/dominant-strategies/go-quai v0.6.0-pre.4.0.20230524173844-6f5186e8cc56
-	github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310
+	github.com/dominant-strategies/quai-accounts v0.0.0-20230607215939-d2d25a80e7c4
 	github.com/holiman/uint256 v1.2.0
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/spf13/viper v1.14.0

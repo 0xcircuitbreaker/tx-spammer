@@ -80,6 +80,8 @@ github.com/dominant-strategies/bn256 v0.0.0-20220930122411-fbf930a7493d h1:hkL13
 github.com/dominant-strategies/bn256 v0.0.0-20220930122411-fbf930a7493d/go.mod h1:nvtPJPChairu4o4iX2XGrstOFpLaAgNYhrUCl5bSng4=
 github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310 h1:mlmP1kwvl0U4jYlRM7qw0D/4svwDdOzPIRY0qnweAmU=
 github.com/dominant-strategies/quai-accounts v0.0.0-20230414193306-3ec918c55310/go.mod h1:muyQZX3IEnbBSZGGmJE0E9iSjy2lF1LE3aejj1n/42s=
+github.com/dominant-strategies/quai-accounts v0.0.0-20230607215939-d2d25a80e7c4 h1:DS2XC+rtJMEIoosFuaEgTh+y/CwGpcdNp9YD+g4AoeQ=
+github.com/dominant-strategies/quai-accounts v0.0.0-20230607215939-d2d25a80e7c4/go.mod h1:muyQZX3IEnbBSZGGmJE0E9iSjy2lF1LE3aejj1n/42s=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
