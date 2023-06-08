@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"math/big"
 	random "math/rand"
 	"os"
@@ -36,7 +37,7 @@ var (
 	NUMZONES           = 9
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
-	targetTPS          = 30
+	targetTPS          = 60
 	exit               = make(chan bool)
 )
 
@@ -100,15 +101,18 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 			walletsPerBlock := WALLETSPERBLOCK
 			txsSent := 0
 			nonces := make(map[common.AddressBytes]uint64)
-			sleepPerTx := startingSleepPerTx
+			var sleepPerTx time.Duration
+			sleepPerTx = startingSleepPerTx
 			errCount := 0
 			shouldWalkUp := true
 
 			start := time.Now()
 			walkUpTime := time.Now()
 			for x := 0; true; x++ {
-				pendingTxCount, err := client.PendingTransactionCount(context.Background())
-				if err != nil || pendingTxCount > 10000 {
+				pendingTxCount, queuedTxCount := client.PoolStatus(context.Background())
+
+				fmt.Println("pending uint", uint64(pendingTxCount), "queued", uint64(queuedTxCount))
+				if err != nil || pendingTxCount > 5000 {
 					time.Sleep(1 * time.Second)
 					continue
 				}
@@ -159,10 +163,24 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
 					fmt.Printf("zone-" + fmt.Sprintf("%d-%d", region, from_zone) + ": " + err.Error() + "\n")
-					if err == core.ErrReplaceUnderpriced || err == core.ErrNonceTooLow {
+					if err.Error() == core.ErrReplaceUnderpriced.Error() {
+						inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+						tx = types.NewTx(&inner_tx)
+						tx, err = types.SignTx(tx, signer, fromPrivKey)
+						if err != nil {
+							fmt.Println(err.Error())
+							return
+						}
+						err = client.SendTransaction(context.Background(), tx)
+						if err != nil {
+							walletIndex++
+							errCount++
+							time.Sleep(time.Second * time.Duration(errCount))
+						}
+					} else if err.Error() == core.ErrNonceTooLow.Error() {
 						nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
 						continue                     // do not increment walletIndex, try again with the same wallet
-					} else if err == core.ErrInsufficientFunds {
+					} else if err.Error() == core.ErrInsufficientFunds.Error() {
 						if walletIndex < len(zoneWallets)-1 {
 							walletIndex++
 						} else {
@@ -197,9 +215,10 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": TPS: %f\n", tps)
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Txs Sent: %d\n", txsSent)
 
-					tpsInNS := float64(walletsPerBlock) / float64(elapsed.Nanoseconds())
-					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + float64(sleepPerTx.Nanoseconds())*(float64(float64(targetTPS)/1e9)-tpsInNS)*0.01 // newSleep = oldSleep * (tps / targetTPS)
-					sleepPerTx = time.Duration(newSleepBasedOnCalcTPS)
+					tpsInNS := float64(walletsPerBlock) / float64(elapsed.Seconds())
+					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + (float64(sleepPerTx.Nanoseconds()) * float64(tpsInNS-float64(targetTPS)) * 0.01) // newSleep = oldSleep * (tps / targetTPS)
+					fmt.Println("controller:", "old", sleepPerTx.Seconds(), "Error", float64(tpsInNS-float64(targetTPS)), "new", newSleepBasedOnCalcTPS)
+					sleepPerTx = time.Duration(math.Max(newSleepBasedOnCalcTPS, 0))
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
 					start = time.Now()
 
