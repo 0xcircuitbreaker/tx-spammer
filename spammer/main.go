@@ -107,13 +107,20 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 			start := time.Now()
 			walkUpTime := time.Now()
 			for x := 0; true; x++ {
+				pendingTxCount, err := client.PendingTransactionCount(context.Background())
+				if err != nil || pendingTxCount > 10000 {
+					time.Sleep(1 * time.Second)
+					continue
+				}
 				fromAddr := common.HexToAddress(zoneWallets[walletIndex].Address)
 				fromPrivKey, err := crypto.ToECDSA(common.FromHex(zoneWallets[walletIndex].PrivateKey))
 				if err != nil {
 					fmt.Println(err.Error())
 					return
 				}
-				if _, exists := nonces[fromAddr.Bytes20()]; !exists {
+				var nonce uint64
+				var exists bool
+				if nonce, exists = nonces[fromAddr.Bytes20()]; !exists {
 					nonce, err := client.PendingNonceAt(context.Background(), fromAddr)
 					if err != nil {
 						fmt.Println(err.Error())
@@ -126,7 +133,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 					}
 					nonces[fromAddr.Bytes20()] = nonce
 				}
-				nonce := nonces[fromAddr.Bytes20()]
+
 				var toAddr common.Address
 				var tx *types.Transaction
 				if x%5 == 0 { // Change to true for all ETXs
@@ -168,8 +175,10 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 					}
 				} else {
 					if enableSleepPerTx {
-						randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
-						time.Sleep(time.Duration(randomNanoseconds * 2))
+						if sleepPerTx != time.Duration(0) {
+							randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
+							time.Sleep(time.Duration(randomNanoseconds * 2))
+						}
 					}
 					errCount = 0
 				}
@@ -189,15 +198,11 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": Txs Sent: %d\n", txsSent)
 
 					tpsInNS := float64(walletsPerBlock) / float64(elapsed.Nanoseconds())
-					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) * (tpsInNS / float64(float64(targetTPS)/1e9)) // newSleep = oldSleep * (tps / targetTPS)
+					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + float64(sleepPerTx.Nanoseconds())*(float64(float64(targetTPS)/1e9)-tpsInNS)*0.01 // newSleep = oldSleep * (tps / targetTPS)
 					sleepPerTx = time.Duration(newSleepBasedOnCalcTPS)
 					fmt.Printf("zone-"+fmt.Sprintf("%d-%d", region, from_zone)+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
 					start = time.Now()
-					/*sleepyTime := (10 * time.Second) - elapsed
-					if sleepyTime < 0 {
-						sleepyTime = 0
-					}
-					time.Sleep(sleepyTime)*/
+
 					if tps > float64(targetTPS) {
 						shouldWalkUp = false
 					} else {

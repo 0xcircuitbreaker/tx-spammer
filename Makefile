@@ -22,10 +22,7 @@ run-mine:
 
 # to run in the background (this will run in auto-miner mode)
 run-background:
-ifeq (,$(wildcard logs))
-	mkdir logs
-endif
-	@nohup ./build/bin/quai-manager 0 >> logs/quai-manager.log 2>&1 &
+	./build/bin/tx-spammer $(group) 2>&1 &
 
 # to run in the background (manually set location)
 run-mine-background:
