@@ -37,7 +37,7 @@ var (
 	NUMZONES           = 9
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
-	targetTPS          = 60
+	targetTPS          = 30
 	exit               = make(chan bool)
 )
 
