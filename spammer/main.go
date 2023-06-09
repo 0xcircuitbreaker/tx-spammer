@@ -32,7 +32,7 @@ var (
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS             = params.GardenChainConfig
+	PARAMS             = params.OrchardChainConfig
 	WALLETSPERBLOCK    = 1360
 	NUMZONES           = 9
 	enableSleepPerTx   = true
