@@ -139,21 +139,10 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 
 				var toAddr common.Address
 				var tx *types.Transaction
-				if x%5 == 0 { // Change to true for all ETXs
-					otherZone := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", region, (from_zone+1)%3)] // Cross Region
-					toAddr = common.HexToAddress(otherZone[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				} else if x%9 == 0 {
-					otherRegion := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", (region+1)%3, (from_zone+1)%3)] // Cross Prime
-					toAddr = common.HexToAddress(otherRegion[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				} else {
-					toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				}
+				toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
+				inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+				tx = types.NewTx(&inner_tx)
+				
 				tx, err = types.SignTx(tx, signer, fromPrivKey)
 				if err != nil {
 					fmt.Println(err.Error())
