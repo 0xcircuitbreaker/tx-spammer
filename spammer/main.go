@@ -34,10 +34,10 @@ var (
 	// Change the params to the proper chain config
 	PARAMS             = params.OrchardChainConfig
 	WALLETSPERBLOCK    = 1360
-	NUMZONES           = 9
+	NUMZONES           = 1
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
-	targetTPS          = 20
+	targetTPS          = 80
 	exit               = make(chan bool)
 )
 
@@ -142,7 +142,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
 				inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 				tx = types.NewTx(&inner_tx)
-				
+
 				tx, err = types.SignTx(tx, signer, fromPrivKey)
 				if err != nil {
 					fmt.Println(err.Error())
