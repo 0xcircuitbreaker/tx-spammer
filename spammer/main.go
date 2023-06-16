@@ -77,149 +77,151 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 	}
 	allClients := getNodeClients(config, host)
 	for zone, client := range allClients.zoneClients {
-		go func(zone string, client *ethclient.Client) {
-			otherZones := make([]string, 0)
-			for k := range config.Ports {
-				if k != zone {
-					otherZones = append(otherZones, k)
+		if client != nil {
+			go func(zone string, client *ethclient.Client) {
+				otherZones := make([]string, 0)
+				for k := range config.Ports {
+					if k != zone {
+						otherZones = append(otherZones, k)
+					}
 				}
-			}
-			signer := types.LatestSigner(
-				&params.ChainConfig{ChainID: big.NewInt(config.ChainId)},
-			)
-			zoneWallets := wallets["group-"+group][zone]
-			walletIndex := 0
-			walletsPerBlock := WALLETSPERBLOCK
-			txsSent := 0
-			nonces := make(map[common.AddressBytes]uint64)
-			var sleepPerTx time.Duration
-			sleepPerTx = startingSleepPerTx
-			errCount := 0
-			shouldWalkUp := true
+				signer := types.LatestSigner(
+					&params.ChainConfig{ChainID: big.NewInt(config.ChainId)},
+				)
+				zoneWallets := wallets["group-"+group][zone]
+				walletIndex := 0
+				walletsPerBlock := WALLETSPERBLOCK
+				txsSent := 0
+				nonces := make(map[common.AddressBytes]uint64)
+				var sleepPerTx time.Duration
+				sleepPerTx = startingSleepPerTx
+				errCount := 0
+				shouldWalkUp := true
 
-			start := time.Now()
-			walkUpTime := time.Now()
-			for x := 0; true; x++ {
-				pendingTxCount, pendingTxQueue := client.PoolStatus(context.Background())
+				start := time.Now()
+				walkUpTime := time.Now()
+				for x := 0; true; x++ {
+					pendingTxCount, pendingTxQueue := client.PoolStatus(context.Background())
 
-				if err != nil || (pendingTxCount+pendingTxQueue) > 5000 {
-					time.Sleep(1 * time.Second)
-					continue
-				}
-				fromAddr := common.HexToAddress(zoneWallets[walletIndex].Address)
-				fromPrivKey, err := crypto.ToECDSA(common.FromHex(zoneWallets[walletIndex].PrivateKey))
-				if err != nil {
-					fmt.Println(err.Error())
-					return
-				}
-				var nonce uint64
-				var exists bool
-				if nonce, exists = nonces[fromAddr.Bytes20()]; !exists {
-					nonce, err = client.PendingNonceAt(context.Background(), fromAddr)
+					if err != nil || (pendingTxCount+pendingTxQueue) > 5000 {
+						time.Sleep(1 * time.Second)
+						continue
+					}
+					fromAddr := common.HexToAddress(zoneWallets[walletIndex].Address)
+					fromPrivKey, err := crypto.ToECDSA(common.FromHex(zoneWallets[walletIndex].PrivateKey))
 					if err != nil {
 						fmt.Println(err.Error())
-						if walletIndex < len(zoneWallets)-1 {
-							walletIndex++
-						} else {
-							walletIndex = 0
-						}
-						continue // try the next wallet
+						return
 					}
-					nonces[fromAddr.Bytes20()] = nonce
-				}
-
-				var toAddr common.Address
-				var tx *types.Transaction
-				var inner_tx types.TxData
-				if x%5 == 0 { // Change to true for all ETXs
-					otherZone := otherZones[rand.Intn(len(otherZones))] // random value from otherZones
-					toAddr = common.HexToAddress(wallets["group-"+group][otherZone][rand.Intn(len(wallets["group-"+group][otherZone]))].Address)
-					inner_tx = &types.InternalToExternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-				} else {
-					toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx = &types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-				}
-				tx = types.NewTx(inner_tx)
-				tx, err = types.SignTx(tx, signer, fromPrivKey)
-				if err != nil {
-					fmt.Println(err.Error())
-					return
-				}
-				if err != nil {
-					fmt.Printf(zone + ": " + err.Error() + "\n")
-					if err.Error() == core.ErrReplaceUnderpriced.Error() {
-						inner_tx := types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-						tx = types.NewTx(&inner_tx)
-						tx, err = types.SignTx(tx, signer, fromPrivKey)
+					var nonce uint64
+					var exists bool
+					if nonce, exists = nonces[fromAddr.Bytes20()]; !exists {
+						nonce, err = client.PendingNonceAt(context.Background(), fromAddr)
 						if err != nil {
 							fmt.Println(err.Error())
-							return
+							if walletIndex < len(zoneWallets)-1 {
+								walletIndex++
+							} else {
+								walletIndex = 0
+							}
+							continue // try the next wallet
 						}
-						err = client.SendTransaction(context.Background(), tx)
-						if err != nil {
+						nonces[fromAddr.Bytes20()] = nonce
+					}
+
+					var toAddr common.Address
+					var tx *types.Transaction
+					var inner_tx types.TxData
+					if x%5 == 0 { // Change to true for all ETXs
+						otherZone := otherZones[rand.Intn(len(otherZones))] // random value from otherZones
+						toAddr = common.HexToAddress(wallets["group-"+group][otherZone][rand.Intn(len(wallets["group-"+group][otherZone]))].Address)
+						inner_tx = &types.InternalToExternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					} else {
+						toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
+						inner_tx = &types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					}
+					tx = types.NewTx(inner_tx)
+					tx, err = types.SignTx(tx, signer, fromPrivKey)
+					if err != nil {
+						fmt.Println(err.Error())
+						return
+					}
+					if err != nil {
+						fmt.Printf(zone + ": " + err.Error() + "\n")
+						if err.Error() == core.ErrReplaceUnderpriced.Error() {
+							inner_tx := types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+							tx = types.NewTx(&inner_tx)
+							tx, err = types.SignTx(tx, signer, fromPrivKey)
+							if err != nil {
+								fmt.Println(err.Error())
+								return
+							}
+							err = client.SendTransaction(context.Background(), tx)
+							if err != nil {
+								fmt.Println(err.Error())
+								walletIndex++
+								errCount++
+								time.Sleep(time.Second * time.Duration(errCount))
+							}
+						} else if err.Error() == core.ErrNonceTooLow.Error() {
+							nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
+							continue                     // do not increment walletIndex, try again with the same wallet
+						} else if err.Error() == core.ErrInsufficientFunds.Error() {
 							fmt.Println(err.Error())
-							walletIndex++
+							if walletIndex < len(zoneWallets)-1 {
+								walletIndex++
+							} else {
+								walletIndex = 0
+							}
+							continue // try the next wallet
+						} else {
+							fmt.Println(err.Error())
 							errCount++
 							time.Sleep(time.Second * time.Duration(errCount))
 						}
-					} else if err.Error() == core.ErrNonceTooLow.Error() {
-						nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
-						continue                     // do not increment walletIndex, try again with the same wallet
-					} else if err.Error() == core.ErrInsufficientFunds.Error() {
-						fmt.Println(err.Error())
-						if walletIndex < len(zoneWallets)-1 {
-							walletIndex++
+					} else {
+						if enableSleepPerTx {
+							if sleepPerTx != time.Duration(0) {
+								randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
+								time.Sleep(time.Duration(randomNanoseconds * 2))
+							}
+						}
+						errCount = 0
+					}
+					if walletIndex < len(zoneWallets)-1 {
+						walletIndex++
+					} else {
+						walletIndex = 0
+					}
+					txsSent++
+					nonces[fromAddr.Bytes20()]++
+
+					if txsSent%walletsPerBlock == 0 && walletIndex != 0 { // not perfect math in the case that walletIndex wraps around to zero
+						elapsed := time.Since(start)
+						tps := float64(walletsPerBlock) / elapsed.Seconds()
+						fmt.Printf(zone+": Time elapsed for %d txs: %d ms TPS: %f Txs Sent: %d ", walletsPerBlock, elapsed.Milliseconds(), tps, txsSent)
+
+						tpsInNS := float64(walletsPerBlock) / float64(elapsed.Seconds())
+						newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + (float64(sleepPerTx.Nanoseconds()) * float64(tpsInNS-float64(targetTPS)) * 0.01) // newSleep = oldSleep * (tps / targetTPS)
+						fmt.Println("controller:", "old", sleepPerTx.Seconds(), "Error", float64(tpsInNS-float64(targetTPS)), "new", newSleepBasedOnCalcTPS)
+						sleepPerTx = time.Duration(math.Max(newSleepBasedOnCalcTPS, 0))
+						fmt.Printf(zone+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
+						start = time.Now()
+
+						if tps > float64(targetTPS) {
+							shouldWalkUp = false
 						} else {
-							walletIndex = 0
-						}
-						continue // try the next wallet
-					} else {
-						fmt.Println(err.Error())
-						errCount++
-						time.Sleep(time.Second * time.Duration(errCount))
-					}
-				} else {
-					if enableSleepPerTx {
-						if sleepPerTx != time.Duration(0) {
-							randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
-							time.Sleep(time.Duration(randomNanoseconds * 2))
+							shouldWalkUp = true
 						}
 					}
-					errCount = 0
-				}
-				if walletIndex < len(zoneWallets)-1 {
-					walletIndex++
-				} else {
-					walletIndex = 0
-				}
-				txsSent++
-				nonces[fromAddr.Bytes20()]++
-
-				if txsSent%walletsPerBlock == 0 && walletIndex != 0 { // not perfect math in the case that walletIndex wraps around to zero
-					elapsed := time.Since(start)
-					tps := float64(walletsPerBlock) / elapsed.Seconds()
-					fmt.Printf(zone+": Time elapsed for %d txs: %d ms TPS: %f Txs Sent: %d ", walletsPerBlock, elapsed.Milliseconds(), tps, txsSent)
-
-					tpsInNS := float64(walletsPerBlock) / float64(elapsed.Seconds())
-					newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + (float64(sleepPerTx.Nanoseconds()) * float64(tpsInNS-float64(targetTPS)) * 0.01) // newSleep = oldSleep * (tps / targetTPS)
-					fmt.Println("controller:", "old", sleepPerTx.Seconds(), "Error", float64(tpsInNS-float64(targetTPS)), "new", newSleepBasedOnCalcTPS)
-					sleepPerTx = time.Duration(math.Max(newSleepBasedOnCalcTPS, 0))
-					fmt.Printf(zone+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
-					start = time.Now()
-
-					if tps > float64(targetTPS) {
-						shouldWalkUp = false
-					} else {
-						shouldWalkUp = true
+					if time.Since(walkUpTime) >= 100*time.Second && int(float64(walletsPerBlock)*1.1) < len(zoneWallets) && shouldWalkUp {
+						walletsPerBlock = int(float64(walletsPerBlock) * 1.1)
+						walkUpTime = time.Now()
 					}
-				}
-				if time.Since(walkUpTime) >= 100*time.Second && int(float64(walletsPerBlock)*1.1) < len(zoneWallets) && shouldWalkUp {
-					walletsPerBlock = int(float64(walletsPerBlock) * 1.1)
-					walkUpTime = time.Now()
-				}
 
-			}
-		}(zone, client)
+				}
+			}(zone, client)
+		}
 	}
 }
 
