@@ -12,7 +12,7 @@ tx-spammer:
 	@echo "Run \"$(GOBIN)/tx-spammer\" to launch tx-spammer"
 
 run:
-	./build/bin/tx-spammer $(group)
+	./build/bin/tx-spammer $(group) $(host)
 
 run-background:
 	./build/bin/tx-spammer $(group) 2>&1 &
