@@ -93,8 +93,8 @@ func LoadConfig(host string) (config Config, err error) {
 		panic(fmt.Errorf("Fatal error config file: %w \n", err))
 	}
 
-	chainId, err := lookupChainId(fmt.Sprintf("http://%s:%d", host, config.Ports["zone-0-0"].Http)) // add host as an input to this fn that comes from a flag
-	if err != nil {                                                                                 // Handle errors reading the config file
+	chainId, err := lookupChainId(fmt.Sprintf("http://%s:8546", host)) // add host as an input to this fn that comes from a flag
+	if err != nil {                                                    // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error getting chainId: %w \n", err))
 	}
 	config.ChainId = chainId
