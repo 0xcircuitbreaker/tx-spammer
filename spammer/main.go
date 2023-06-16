@@ -46,7 +46,7 @@ func main() {
 	group := os.Args[1]
 
 	host := "localhost"
-	if len(os.Args) > 1 {
+	if len(os.Args) > 2 {
 		host = os.Args[2]
 	}
 
