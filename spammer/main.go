@@ -28,9 +28,7 @@ var (
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS             = params.OrchardChainConfig
 	WALLETSPERBLOCK    = 1360
-	NUMZONES           = 1
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
 	targetTPS          = 80
@@ -71,6 +69,7 @@ func main() {
 
 func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) {
 	config, err := util.LoadConfig(host)
+	rand := random.New(random.NewSource(time.Now().UnixNano()))
 	fmt.Println("config loaded", config)
 	if err != nil {
 		fmt.Println("cannot load config: " + err.Error())
@@ -79,6 +78,12 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 	allClients := getNodeClients(config, host)
 	for zone, client := range allClients.zoneClients {
 		go func(zone string, client *ethclient.Client) {
+			otherZones := make([]string, 0)
+			for k := range config.Ports {
+				if k != zone {
+					otherZones = append(otherZones, k)
+				}
+			}
 			signer := types.LatestSigner(
 				&params.ChainConfig{ChainID: big.NewInt(config.ChainId)},
 			)
@@ -125,16 +130,21 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 
 				var toAddr common.Address
 				var tx *types.Transaction
-				toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
-				inner_tx := types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-				tx = types.NewTx(&inner_tx)
-
+				var inner_tx types.TxData
+				if x%5 == 0 { // Change to true for all ETXs
+					otherZone := otherZones[rand.Intn(len(otherZones))] // random value from otherZones
+					toAddr = common.HexToAddress(wallets["group-"+group][otherZone][rand.Intn(len(wallets["group-"+group][otherZone]))].Address)
+					inner_tx = &types.InternalToExternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+				} else {
+					toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
+					inner_tx = &types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+				}
+				tx = types.NewTx(inner_tx)
 				tx, err = types.SignTx(tx, signer, fromPrivKey)
 				if err != nil {
 					fmt.Println(err.Error())
 					return
 				}
-				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
 					fmt.Printf(zone + ": " + err.Error() + "\n")
 					if err.Error() == core.ErrReplaceUnderpriced.Error() {
@@ -234,7 +244,7 @@ func getNodeClients(config util.Config, host string) orderedBlockClients {
 	for zone, ports := range config.Ports {
 		zoneClient, err := ethclient.Dial(fmt.Sprintf("ws://%s:%d", host, ports.Ws))
 		if err != nil {
-			panic(fmt.Errorf("could not connect to zone %s: %v", zone, err))
+			delete(allClients.zoneClients, zone)
 		}
 		allClients.zoneClients[zone] = zoneClient
 	}
