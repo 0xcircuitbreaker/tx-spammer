@@ -215,15 +215,10 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 
 // Block struct to hold all Client fields.
 type orderedBlockClients struct {
-	primeClient      *ethclient.Client
-	primeAvailable   bool
-	regionClients    []*ethclient.Client
-	regionsAvailable []bool
-	zoneClients      map[string]*ethclient.Client
-	zonesAvailable   [][]bool
-	zoneAccounts     [][]accounts.Account
-	zoneWallets      [][]wallet
-	walletLock       deadlock.RWMutex
+	zoneClients  map[string]*ethclient.Client
+	zoneAccounts [][]accounts.Account
+	zoneWallets  [][]wallet
+	walletLock   deadlock.RWMutex
 }
 
 // getNodeClients takes in a config and retrieves the Prime, Region, and Zone client
@@ -232,17 +227,9 @@ func getNodeClients(config util.Config, host string) orderedBlockClients {
 
 	// initializing all the clients
 	allClients := orderedBlockClients{
-		zoneClients:    make(map[string]*ethclient.Client, 3),
-		zonesAvailable: make([][]bool, 3),
-		zoneAccounts:   make([][]accounts.Account, 3),
+		zoneClients:  make(map[string]*ethclient.Client, 3),
+		zoneAccounts: make([][]accounts.Account, 3),
 	}
-
-	for i := range allClients.zonesAvailable {
-		allClients.zonesAvailable[i] = make([]bool, 3)
-	}
-	//for i := range allClients.zoneClients {
-	//	allClients.zoneAccounts[i] = make([]accounts.Account, 3)
-	//}
 
 	for zone, ports := range config.Ports {
 		zoneClient, err := ethclient.Dial(fmt.Sprintf("ws://%s:%d", host, ports.Ws))
