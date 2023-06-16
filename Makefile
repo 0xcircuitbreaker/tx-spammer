@@ -11,34 +11,20 @@ tx-spammer:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/tx-spammer\" to launch tx-spammer"
 
-# to run auto-miner without providing a location manually
-# make sure config.yaml file is set up properly
 run:
 	./build/bin/tx-spammer $(group)
 
-# to manually select a location to mine
-run-mine:
-	./build/bin/quai-manager $(region) $(zone) 1
-
-# to run in the background (this will run in auto-miner mode)
 run-background:
 	./build/bin/tx-spammer $(group) 2>&1 &
 
-# to run in the background (manually set location)
-run-mine-background:
-ifeq (,$(wildcard logs))
-	mkdir logs
-endif
-	@nohup ./build/bin/quai-manager $(region) $(zone) 1 >> logs/quai-manager.log 2>&1 &
-
 stop:
 ifeq ($(shell uname -s),Darwin)
-	@if pgrep quai-manager; then pkill -f ./build/bin/quai-manager; fi
-	@while pgrep quai-manager >/dev/null; do \
-		echo "Stopping all Quai Network managers, please wait until terminated."; \
+	@if pgrep tx-spammer; then pkill -f ./build/bin/tx-spammer; fi
+	@while pgrep tx-spammer >/dev/null; do \
+		echo "Stopping all Quai TX Spammers, please wait until terminated."; \
 		sleep 3; \
 	done;
 else
-	@echo "Stopping all Quai Network managers, please wait until terminated.";
-	@if pgrep quai-manager; then killall -w ./build/bin/quai-manager; fi
+	@echo "Stopping all Quai TX Spammers, please wait until terminated.";
+	@if pgrep tx-spammer; then killall -w ./build/bin/tx-spammer; fi
 endif

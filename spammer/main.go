@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +10,6 @@ import (
 	"math/big"
 	random "math/rand"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -21,7 +19,6 @@ import (
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
 	accounts "github.com/dominant-strategies/quai-accounts"
-	"github.com/dominant-strategies/quai-accounts/keystore"
 	"github.com/dominant-strategies/tx-spammer/util"
 	"github.com/sasha-s/go-deadlock"
 )
@@ -63,11 +60,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	//addresses_0 := result["group-"+group]["zone-0-0"]
-	//fmt.Printf("addresses_0: %v\n", addresses_0)
-	//GenerateKeys()
 	SpamTxs(result, group)
-	//GeneratePrivKeyAndSpam()
 	<-exit
 }
 
@@ -227,114 +220,6 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 	}
 }
 
-func GeneratePrivKeyAndSpam() {
-	addrCache := &AddressCache{
-		addresses: make([][]chan common.Address, 3),
-		privKeys:  make([][]chan ecdsa.PrivateKey, 3),
-	}
-	for i := range addrCache.addresses {
-		addrCache.addresses[i] = make([]chan common.Address, 3)
-		for x := range addrCache.addresses[i] {
-			addrCache.addresses[i][x] = make(chan common.Address, 1000000)
-		}
-	}
-	for i := range addrCache.privKeys {
-		addrCache.privKeys[i] = make([]chan ecdsa.PrivateKey, 3)
-		for x := range addrCache.privKeys[i] {
-			addrCache.privKeys[i][x] = make(chan ecdsa.PrivateKey, 1000000)
-		}
-	}
-	go GenerateAddresses(addrCache)
-	time.Sleep(time.Second * 5)
-	config, err := util.LoadConfig(".")
-	if err != nil {
-		fmt.Println("cannot load config: " + err.Error())
-		return
-	}
-	allClients := getNodeClients(config)
-
-	region := -1
-	for i := 0; i < 1; i++ {
-		from_zone := i % 3
-		if i%3 == 0 {
-			region++
-		}
-		addrCache.addresses = append(addrCache.addresses, make([]chan common.Address, 0, 0))
-		go func(from_zone int, region int, addrCache *AddressCache) {
-			if !allClients.zonesAvailable[region][from_zone] {
-				return
-			}
-			client := allClients.zoneClients[region][from_zone]
-			signer := types.LatestSigner(PARAMS)
-			var toAddr common.Address
-			start1 := time.Now()
-			start2 := time.Now()
-			for x := 0; true; x++ {
-				fromKey := <-addrCache.privKeys[region][from_zone]
-				var tx *types.Transaction
-				if x%1000 == 0 && x != 0 {
-					fmt.Println("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
-					start2 = time.Now()
-				}
-				if x%5 == 0 { // Change to true for all ETXs
-					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
-					// Change the params
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				} else {
-					// Change the params
-					toAddr = <-addrCache.addresses[region][from_zone]
-					toAddr = <-addrCache.addresses[region][from_zone] // twice so we don't send to the same address
-					inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-					tx = types.NewTx(&inner_tx)
-				}
-				tx, err = types.SignTx(tx, signer, &fromKey)
-				if err != nil {
-					fmt.Println(err.Error())
-					return
-				}
-				err = client.SendTransaction(context.Background(), tx)
-				if err != nil {
-					fmt.Println(err.Error())
-				}
-				time.Sleep(5000 * time.Millisecond)
-			}
-			elapsed := time.Since(start1)
-			fmt.Println("Time elapsed for all txs in ms: ", elapsed.Milliseconds())
-		}(from_zone, region, addrCache)
-	}
-}
-
-func ChooseRandomETXAddress(addrCache *AddressCache, region, zone int) common.Address {
-	r, z := random.Intn(3), random.Intn(3)
-	if r == region {
-		return ChooseRandomETXAddress(addrCache, region, zone)
-	} else if z == zone {
-		return ChooseRandomETXAddress(addrCache, region, zone)
-	}
-	toAddr := <-addrCache.addresses[r][z]
-	return toAddr
-}
-
-func GenerateAddresses(addrCache *AddressCache) {
-	for {
-		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
-		if err != nil {
-			fmt.Println(err.Error())
-			continue
-		}
-		addr := crypto.PubkeyToAddress(privKey.PublicKey)
-		location := Location(addr)
-		if location == nil {
-			continue
-		}
-		if location.HasZone() {
-			addrCache.addresses[location.Region()][location.Zone()] <- addr
-			addrCache.privKeys[location.Region()][location.Zone()] <- *privKey
-		}
-	}
-}
-
 // Block struct to hold all Client fields.
 type orderedBlockClients struct {
 	primeClient      *ethclient.Client
@@ -417,67 +302,6 @@ func getNodeClients(config util.Config) orderedBlockClients {
 	return allClients
 }
 
-func addAccToClient(clients *orderedBlockClients, acc accounts.Account, i int) {
-	switch i {
-	case 0:
-		common.NodeLocation = []byte{0, 0}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[0][0] = acc
-	case 1:
-		common.NodeLocation = []byte{0, 1}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[0][1] = acc
-	case 2:
-		common.NodeLocation = []byte{0, 2}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[0][2] = acc
-	case 3:
-		common.NodeLocation = []byte{1, 0}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[1][0] = acc
-	case 4:
-		common.NodeLocation = []byte{1, 1}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[1][1] = acc
-	case 5:
-		common.NodeLocation = []byte{1, 2}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[1][2] = acc
-	case 6:
-		common.NodeLocation = []byte{2, 0}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[2][0] = acc
-	case 7:
-		common.NodeLocation = []byte{2, 1}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[2][1] = acc
-	case 8:
-		common.NodeLocation = []byte{2, 2}
-		if !common.IsInChainScope(acc.Address.Bytes()) {
-			panic("Account not in chain scope" + acc.Address.String())
-		}
-		clients.zoneAccounts[2][2] = acc
-	default:
-		panic("Error adding account to client, chain not found " + fmt.Sprint(i) + acc.Address.String())
-	}
-}
-
 func Location(a common.Address) *common.Location {
 
 	// Search zone->region->prime address spaces in-slice first, and then search
@@ -509,75 +333,4 @@ func Location(a common.Address) *common.Location {
 		}
 	}
 	return nil
-}
-
-func GenerateKeys() {
-	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
-	if len(ks.Accounts()) > 0 {
-		fmt.Println("Already have keys, please delete the .test directory if you want to generate new keys")
-		return
-	}
-
-	foundAddrs := 0
-	common.NodeLocation = []byte{0, 0}
-	fmt.Println("cyprus1")
-	addrs := make([]common.Address, 0)
-
-	for i := 0; i < 10000; i++ {
-		privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
-		if err != nil {
-			fmt.Println(err.Error())
-			return
-		}
-		addr := crypto.PubkeyToAddress(privKey.PublicKey)
-		if common.IsInChainScope(addr.Bytes()) {
-			fmt.Println(addr.Hex())
-			fmt.Println(crypto.FromECDSA(privKey))
-			ks.ImportECDSA(privKey, "")
-			addrs = append(addrs, addr)
-			foundAddrs++
-		}
-		if foundAddrs == 1 {
-			foundAddrs = 0
-			switch common.NodeLocation.Name() {
-			case "cyprus1":
-				common.NodeLocation = []byte{0, 1}
-				fmt.Println(common.NodeLocation.Name())
-			case "cyprus2":
-				common.NodeLocation = []byte{0, 2}
-				fmt.Println(common.NodeLocation.Name())
-			case "cyprus3":
-				common.NodeLocation = []byte{1, 0}
-				fmt.Println(common.NodeLocation.Name())
-			case "paxos1":
-				common.NodeLocation = []byte{1, 1}
-				fmt.Println(common.NodeLocation.Name())
-			case "paxos2":
-				common.NodeLocation = []byte{1, 2}
-				fmt.Println(common.NodeLocation.Name())
-			case "paxos3":
-				common.NodeLocation = []byte{2, 0}
-				fmt.Println(common.NodeLocation.Name())
-			case "hydra1":
-				common.NodeLocation = []byte{2, 1}
-				fmt.Println(common.NodeLocation.Name())
-			case "hydra2":
-				common.NodeLocation = []byte{2, 2}
-				fmt.Println(common.NodeLocation.Name())
-			case "hydra3":
-				i = 10000
-			}
-		}
-	}
-
-	fmt.Println("ZONE_0_0_COINBASE=" + addrs[0].String())
-	fmt.Println("ZONE_0_1_COINBASE=" + addrs[1].String())
-	fmt.Println("ZONE_0_2_COINBASE=" + addrs[2].String())
-	fmt.Println("ZONE_1_0_COINBASE=" + addrs[3].String())
-	fmt.Println("ZONE_1_1_COINBASE=" + addrs[4].String())
-	fmt.Println("ZONE_1_2_COINBASE=" + addrs[5].String())
-	fmt.Println("ZONE_2_0_COINBASE=" + addrs[6].String())
-	fmt.Println("ZONE_2_1_COINBASE=" + addrs[7].String())
-	fmt.Println("ZONE_2_2_COINBASE=" + addrs[8].String())
-
 }
