@@ -46,6 +46,12 @@ type wallet struct {
 
 func main() {
 	group := os.Args[1]
+
+	host := "localhost"
+	if len(os.Args) > 1 {
+		host = os.Args[2]
+	}
+
 	jsonFile, err := os.Open("wallets.json")
 	if err != nil {
 		fmt.Println(err)
@@ -59,18 +65,18 @@ func main() {
 		panic(fmt.Errorf("error parsing wallets.json: %v", err))
 		return
 	}
-	SpamTxs(result, group)
+	SpamTxs(result, group, host)
 	<-exit
 }
 
-func SpamTxs(wallets map[string]map[string][]wallet, group string) {
-	config, err := util.LoadConfig(".")
+func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) {
+	config, err := util.LoadConfig(host)
 	fmt.Println("config loaded", config)
 	if err != nil {
 		fmt.Println("cannot load config: " + err.Error())
 		return
 	}
-	allClients := getNodeClients(config)
+	allClients := getNodeClients(config, host)
 	for zone, client := range allClients.zoneClients {
 		go func(zone string, client *ethclient.Client) {
 			signer := types.LatestSigner(
@@ -222,7 +228,7 @@ type orderedBlockClients struct {
 
 // getNodeClients takes in a config and retrieves the Prime, Region, and Zone client
 // that is used for mining in a slice.
-func getNodeClients(config util.Config) orderedBlockClients {
+func getNodeClients(config util.Config, host string) orderedBlockClients {
 
 	// initializing all the clients
 	allClients := orderedBlockClients{
@@ -239,7 +245,7 @@ func getNodeClients(config util.Config) orderedBlockClients {
 	//}
 
 	for zone, ports := range config.Ports {
-		zoneClient, err := ethclient.Dial(fmt.Sprintf("ws://localhost:%d", ports.Ws))
+		zoneClient, err := ethclient.Dial(fmt.Sprintf("ws://%s:%d", host, ports.Ws))
 		if err != nil {
 			panic(fmt.Errorf("could not connect to zone %s: %v", zone, err))
 		}
