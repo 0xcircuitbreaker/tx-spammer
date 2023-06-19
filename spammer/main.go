@@ -17,9 +17,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
-	accounts "github.com/dominant-strategies/quai-accounts"
 	"github.com/dominant-strategies/tx-spammer/util"
-	"github.com/sasha-s/go-deadlock"
 )
 
 var (
@@ -75,8 +73,8 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 		fmt.Println("cannot load config: " + err.Error())
 		return
 	}
-	allClients := getNodeClients(config, host)
-	for zone, client := range allClients.zoneClients {
+	zoneClients := getAvailableZoneClients(config, host)
+	for zone, client := range zoneClients {
 		if client != nil {
 			go func(zone string, client *ethclient.Client) {
 				otherZones := make([]string, 0)
@@ -225,30 +223,17 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 	}
 }
 
-// Block struct to hold all Client fields.
-type orderedBlockClients struct {
-	zoneClients  map[string]*ethclient.Client
-	zoneAccounts [][]accounts.Account
-	zoneWallets  [][]wallet
-	walletLock   deadlock.RWMutex
-}
+// getAvailableZoneClients takes in a config and retrieves the Prime, Region, and Zone client
+func getAvailableZoneClients(config util.Config, host string) map[string]*ethclient.Client {
 
-// getNodeClients takes in a config and retrieves the Prime, Region, and Zone client
-// that is used for mining in a slice.
-func getNodeClients(config util.Config, host string) orderedBlockClients {
-
-	// initializing all the clients
-	allClients := orderedBlockClients{
-		zoneClients:  make(map[string]*ethclient.Client, 3),
-		zoneAccounts: make([][]accounts.Account, 3),
-	}
+	zoneClients := make(map[string]*ethclient.Client, 3)
 
 	for zone, ports := range config.Ports {
 		zoneClient, err := ethclient.Dial(fmt.Sprintf("ws://%s:%d", host, ports.Ws))
 		if err != nil {
-			delete(allClients.zoneClients, zone)
+			delete(zoneClients, zone)
 		}
-		allClients.zoneClients[zone] = zoneClient
+		zoneClients[zone] = zoneClient
 	}
-	return allClients
+	return zoneClients
 }
