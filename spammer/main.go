@@ -144,11 +144,12 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 						fmt.Println(err.Error())
 						return
 					}
+					err = client.SendTransaction(context.Background(), tx)
 					if err != nil {
 						fmt.Printf(zone + ": " + err.Error() + "\n")
 						if err.Error() == core.ErrReplaceUnderpriced.Error() {
-							inner_tx := types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
-							tx = types.NewTx(&inner_tx)
+							inner_tx = &types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+							tx = types.NewTx(inner_tx)
 							tx, err = types.SignTx(tx, signer, fromPrivKey)
 							if err != nil {
 								fmt.Println(err.Error())
