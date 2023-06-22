@@ -2,10 +2,8 @@ module github.com/dominant-strategies/tx-spammer
 
 go 1.19
 
-replace github.com/dominant-strategies/go-quai => ../go-quai
-
 require (
-	github.com/dominant-strategies/go-quai v0.6.0-pre.4.0.20230524173844-6f5186e8cc56
+	github.com/dominant-strategies/go-quai v0.6.0-pre.4.0.20230620213951-e4f06775181f
 	github.com/dominant-strategies/quai-accounts v0.0.0-20230607215939-d2d25a80e7c4
 	github.com/holiman/uint256 v1.2.0
 	github.com/spf13/viper v1.14.0
