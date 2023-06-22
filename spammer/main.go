@@ -29,7 +29,7 @@ var (
 	WALLETSPERBLOCK    = 1360
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
-	targetTPS          = 18
+	targetTPS          = 6
 	exit               = make(chan bool)
 )
 
