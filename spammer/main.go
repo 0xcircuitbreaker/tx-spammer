@@ -130,7 +130,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 					var toAddr common.Address
 					var tx *types.Transaction
 					var inner_tx types.TxData
-					if x%5 == 0 { // Change to true for all ETXs
+					if rand.Float64() < config.EtxFreq { // Change to true for all ETXs
 						otherZone := otherZones[rand.Intn(len(otherZones))] // random value from otherZones
 						toAddr = common.HexToAddress(wallets["group-"+group][otherZone][rand.Intn(len(wallets["group-"+group][otherZone]))].Address)
 						inner_tx = &types.InternalToExternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}

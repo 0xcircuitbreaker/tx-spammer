@@ -8,7 +8,6 @@ require (
 	github.com/dominant-strategies/go-quai v0.6.0-pre.4.0.20230524173844-6f5186e8cc56
 	github.com/dominant-strategies/quai-accounts v0.0.0-20230607215939-d2d25a80e7c4
 	github.com/holiman/uint256 v1.2.0
-	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/spf13/viper v1.14.0
 )
 
@@ -35,7 +34,6 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
-	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/tsdb v0.7.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect

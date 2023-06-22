@@ -62,6 +62,7 @@ func lookupChainId(url string) (int64, error) {
 type Config struct {
 	Ports   map[string]Zone
 	ChainId int64
+	EtxFreq float64
 }
 
 type Zone struct {
