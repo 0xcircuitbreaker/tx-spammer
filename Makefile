@@ -7,7 +7,7 @@ GO ?= latest
 GORUN = env GO111MODULE=on go run
 
 tx-spammer:
-	go build -o ./build/bin/tx-spammer spammer/main.go  
+	go build -o ./build/bin/tx-spammer spammer/main.go spammer/tests.go
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/tx-spammer\" to launch tx-spammer"
 
