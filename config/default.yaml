@@ -27,3 +27,6 @@ Ports:
     http: 8678
     ws: 8679
 EtxFreq: 0
+NumZones: 9
+NumMachines: 1
+Tps: 100

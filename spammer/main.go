@@ -29,7 +29,6 @@ var (
 	WALLETSPERBLOCK    = 1360
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
-	targetTPS          = 18
 	exit               = make(chan bool)
 )
 
@@ -77,6 +76,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 	for zone, client := range zoneClients {
 		if client != nil {
 			go func(zone string, client *ethclient.Client) {
+				targetTPS := config.Tps / config.NumMachines / config.NumZones
 				otherZones := make([]string, 0)
 				for k := range config.Ports {
 					if k != zone {
