@@ -66,6 +66,8 @@ type Config struct {
 	NumMachines int
 	NumZones    int
 	Tps         int
+	Verbosity   string
+	BlockTime   int
 }
 
 type Zone struct {

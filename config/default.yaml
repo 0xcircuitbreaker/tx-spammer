@@ -30,3 +30,5 @@ EtxFreq: 0
 NumZones: 9
 NumMachines: 1
 Tps: 100
+Verbosity: "debug"
+Blocktime: 2

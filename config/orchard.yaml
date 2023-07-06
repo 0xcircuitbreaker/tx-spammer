@@ -1,3 +1,4 @@
 EtxFreq: .2
 NumMachines: 6
 Tps: 1000
+BlockTime: 12

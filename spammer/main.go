@@ -8,6 +8,8 @@ import (
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/crypto"
+	"github.com/dominant-strategies/tx-spammer/log"
+	"github.com/dominant-strategies/tx-spammer/util"
 	"io"
 	"math"
 	"math/big"
@@ -17,7 +19,6 @@ import (
 
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
-	"github.com/dominant-strategies/tx-spammer/util"
 )
 
 var (
@@ -41,42 +42,44 @@ type wallet struct {
 
 func main() {
 	group := os.Args[1]
-
 	host := "localhost"
 	if len(os.Args) > 2 {
 		host = os.Args[2]
 	}
-
-	jsonFile, err := os.Open("wallets.json")
+	filename := "wallets.json"
+	jsonFile, err := os.Open(filename)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal("can't find file", "file", filename)
 	}
 	defer jsonFile.Close()
 	byteValue, _ := io.ReadAll(jsonFile)
 	var result map[string]map[string][]wallet
 	err = json.Unmarshal(byteValue, &result)
 	if err != nil {
-		panic(fmt.Errorf("error parsing wallets.json: %v", err))
-		return
+		log.Fatal("error parsing", "file", filename)
 	}
-	SpamTxs(result, group, host)
+	config, err := util.LoadConfig(host)
+	if err != nil {
+		panic("cannot load config: " + err.Error())
+	}
+	log.ConfigureLogger(log.LoggerConfig{
+		Verbosity:  config.Verbosity,
+		ShowColors: true,
+	})
+	SpamTxs(result, config, group, host)
 	<-exit
 }
 
-func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) {
-	config, err := util.LoadConfig(host)
+func SpamTxs(wallets map[string]map[string][]wallet, config util.Config, group, host string) {
 	rand := random.New(random.NewSource(time.Now().UnixNano()))
-	fmt.Println("config loaded", config)
-	if err != nil {
-		fmt.Println("cannot load config: " + err.Error())
-		return
-	}
+	log.Info("config loaded", "chainId", config.ChainId, "tps", config.Tps, "numMachines", config.NumMachines, "numZones", config.NumZones, "group", group)
 	zoneClients := getAvailableZoneClients(config, host)
 	for zone, client := range zoneClients {
 		if client != nil {
 			go func(zone string, client *ethclient.Client) {
+				log.Info("zone started", "zone", zone)
 				targetTPS := config.Tps / config.NumMachines / config.NumZones
+				log.Info("target TPS", "tps", targetTPS)
 				otherZones := make([]string, 0)
 				for k := range config.Ports {
 					if k != zone {
@@ -88,7 +91,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 				)
 				zoneWallets := wallets["group-"+group][zone]
 				walletIndex := 0
-				walletsPerBlock := WALLETSPERBLOCK
+				walletsPerBlock := targetTPS * config.BlockTime
 				txsSent := 0
 				nonces := make(map[common.AddressBytes]uint64)
 				var sleepPerTx time.Duration
@@ -101,14 +104,14 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 				for x := 0; true; x++ {
 					pendingTxCount, pendingTxQueue := client.PoolStatus(context.Background())
 
-					if err != nil || (pendingTxCount+pendingTxQueue) > 5000 {
+					if (pendingTxCount + pendingTxQueue) > 5000 {
 						time.Sleep(1 * time.Second)
 						continue
 					}
 					fromAddr := common.HexToAddress(zoneWallets[walletIndex].Address)
 					fromPrivKey, err := crypto.ToECDSA(common.FromHex(zoneWallets[walletIndex].PrivateKey))
 					if err != nil {
-						fmt.Println(err.Error())
+						log.Fatal("failed to open wallet", "zone", zone, "error", err.Error())
 						return
 					}
 					var nonce uint64
@@ -116,7 +119,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 					if nonce, exists = nonces[fromAddr.Bytes20()]; !exists {
 						nonce, err = client.PendingNonceAt(context.Background(), fromAddr)
 						if err != nil {
-							fmt.Println(err.Error())
+							log.Error("failed to get nonce", "error", err.Error())
 							if walletIndex < len(zoneWallets)-1 {
 								walletIndex++
 							} else {
@@ -141,23 +144,24 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 					tx = types.NewTx(inner_tx)
 					tx, err = types.SignTx(tx, signer, fromPrivKey)
 					if err != nil {
-						fmt.Println(err.Error())
+						log.Error("can't sign tx", "zone", zone, "hash", tx.Hash().String(), "error", err.Error())
 						return
 					}
+					log.Debug("sending tx", "hash", tx.Hash().String())
 					err = client.SendTransaction(context.Background(), tx)
 					if err != nil {
-						fmt.Printf(zone + ": " + err.Error() + "\n")
+						log.Info("failed to send", "zone", zone, "error", err.Error())
 						if err.Error() == core.ErrReplaceUnderpriced.Error() {
 							inner_tx = &types.InternalTx{ChainID: big.NewInt(config.ChainId), Nonce: nonce, GasTipCap: new(big.Int).Mul(big.NewInt(2), MINERTIP), GasFeeCap: new(big.Int).Mul(big.NewInt(2), MAXFEE), Gas: GAS, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 							tx = types.NewTx(inner_tx)
 							tx, err = types.SignTx(tx, signer, fromPrivKey)
 							if err != nil {
-								fmt.Println(err.Error())
+								log.Error("failed to sign", "error", err.Error())
 								return
 							}
 							err = client.SendTransaction(context.Background(), tx)
 							if err != nil {
-								fmt.Println(err.Error())
+								log.Info("failed to send", "zone", zone, "error", err.Error())
 								walletIndex++
 								errCount++
 								time.Sleep(time.Second * time.Duration(errCount))
@@ -166,7 +170,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 							nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
 							continue                     // do not increment walletIndex, try again with the same wallet
 						} else if err.Error() == core.ErrInsufficientFunds.Error() {
-							fmt.Println(err.Error())
+							log.Error("insufficient funds", "error", err.Error())
 							if walletIndex < len(zoneWallets)-1 {
 								walletIndex++
 							} else {
@@ -174,7 +178,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 							}
 							continue // try the next wallet
 						} else {
-							fmt.Println(err.Error())
+							log.Error("add this error handling ->", "error", err.Error())
 							errCount++
 							time.Sleep(time.Second * time.Duration(errCount))
 						}
@@ -197,14 +201,17 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string, host string) 
 
 					if txsSent%walletsPerBlock == 0 && walletIndex != 0 { // not perfect math in the case that walletIndex wraps around to zero
 						elapsed := time.Since(start)
+						if elapsed.Seconds() == 0 {
+							continue
+						}
 						tps := float64(walletsPerBlock) / elapsed.Seconds()
-						fmt.Printf(zone+": Time elapsed for %d txs: %d ms TPS: %f Txs Sent: %d ", walletsPerBlock, elapsed.Milliseconds(), tps, txsSent)
+						log.Debug("tps check", "walletsPerBlock", walletsPerBlock, "elapsed", elapsed.Milliseconds(), "txsSent", txsSent)
 
 						tpsInNS := float64(walletsPerBlock) / float64(elapsed.Seconds())
 						newSleepBasedOnCalcTPS := float64(sleepPerTx.Nanoseconds()) + (float64(sleepPerTx.Nanoseconds()) * float64(tpsInNS-float64(targetTPS)) * 0.01) // newSleep = oldSleep * (tps / targetTPS)
-						fmt.Println("controller:", "old", sleepPerTx.Seconds(), "Error", float64(tpsInNS-float64(targetTPS)), "new", newSleepBasedOnCalcTPS)
+						log.Info("controller:", "old", sleepPerTx.Seconds(), "Error", float64(tpsInNS-float64(targetTPS)), "new", newSleepBasedOnCalcTPS)
 						sleepPerTx = time.Duration(math.Max(newSleepBasedOnCalcTPS, 0))
-						fmt.Printf(zone+": New Sleep: %d ms\n", sleepPerTx.Milliseconds())
+						log.Info(zone, ": New Sleep", sleepPerTx.Milliseconds())
 						start = time.Now()
 
 						if tps > float64(targetTPS) {
