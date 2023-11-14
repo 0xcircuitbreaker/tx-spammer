@@ -29,14 +29,14 @@ import (
 )
 
 var (
-	MAXFEE   = big.NewInt(4 * params.GWei)
-	MINERTIP = big.NewInt(2 * params.GWei)
+	MAXFEE   = big.NewInt(8 * params.GWei)
+	MINERTIP = big.NewInt(4 * params.GWei)
 	GAS      = uint64(21000)
 	VALUE    = big.NewInt(1)
 	// Change the params to the proper chain config
-	PARAMS             = params.LocalChainConfig
+	PARAMS             = params.Blake3PowLocalChainConfig
 	WALLETSPERBLOCK    = 160
-	NUMZONES           = 1
+	NUMZONES           = 3
 	enableSleepPerTx   = true
 	startingSleepPerTx = 20 * time.Millisecond
 	targetTPS          = 30
@@ -73,8 +73,17 @@ func main() {
 	//fmt.Printf("addresses_0: %v\n", addresses_0)
 	//GenerateKeys()
 	//SpamTxs(result, group)
-	ExternalTokenTransfer(result, group)
-	//SendQuai(result["group-"+group])
+	//ExternalTokenTransfer_(result["group-"+group], "0x142161ab0c40eb4bdbcda58662285ed917b2c61e")
+	//ExternalNFTTransfer(result["group-"+group], "0x21df829d429a616afdc20df54c7f14c37cfe391c")
+	SendQuai(result["group-"+group], "0x030bac2856a4629b27800af6d0891a7e05028dd0")
+	/*region := -1
+	for i := 0; i < NUMZONES; i++ {
+		from_zone := i % 3
+		if i%3 == 0 {
+			region++
+		}
+		SendMulticall(result["group-"+group], region, from_zone)
+	}*/
 	//GeneratePrivKeyAndSpam()
 	<-exit
 }
@@ -394,12 +403,12 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				if x%5 == 0 { // Change to true for all ETXs
 					otherZone := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", region, (from_zone+1)%3)] // Cross Region
 					toAddr = common.HexToAddress(otherZone[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, calcEtxFeeMultiplier(fromAddr, toAddr)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, calcEtxFeeMultiplier(fromAddr, toAddr)), Gas: GAS * 3, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else if x%9 == 0 {
 					otherRegion := wallets["group-"+group]["zone-"+fmt.Sprintf("%d-%d", (region+1)%3, (from_zone+1)%3)] // Cross Prime
 					toAddr = common.HexToAddress(otherRegion[len(zoneWallets)-1-walletIndex].Address)
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, calcEtxFeeMultiplier(fromAddr, toAddr)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, calcEtxFeeMultiplier(fromAddr, toAddr)), Gas: GAS * 3, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else {
 					toAddr = common.HexToAddress(zoneWallets[len(zoneWallets)-1-walletIndex].Address)
@@ -414,7 +423,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 				err = client.SendTransaction(context.Background(), tx)
 				if err != nil {
 					fmt.Printf("zone-" + fmt.Sprintf("%d-%d", region, from_zone) + ": " + err.Error() + "\n")
-					if err == core.ErrReplaceUnderpriced || err == core.ErrNonceTooLow {
+					if err == core.ErrReplaceUnderpriced || err == core.ErrNonceTooLow || err == core.ErrAlreadyKnown {
 						nonces[fromAddr.Bytes20()]++ // optional: ask the node for the correct pending nonce
 						continue                     // do not increment walletIndex, try again with the same wallet
 					} else if err == core.ErrInsufficientFunds {
@@ -429,7 +438,7 @@ func SpamTxs(wallets map[string]map[string][]wallet, group string) {
 						time.Sleep(time.Second * time.Duration(errCount))
 					}
 				} else {
-					if enableSleepPerTx {
+					if enableSleepPerTx && sleepPerTx.Nanoseconds() != 0 {
 						randomNanoseconds := random.Intn(int(sleepPerTx.Nanoseconds()))
 						time.Sleep(time.Duration(randomNanoseconds * 2))
 					}
@@ -520,6 +529,7 @@ func GeneratePrivKeyAndSpam() {
 			start2 := time.Now()
 			for x := 0; true; x++ {
 				fromKey := <-addrCache.privKeys[region][from_zone]
+				fromAddr := crypto.PubkeyToAddress(fromKey.PublicKey)
 				var tx *types.Transaction
 				if x%1000 == 0 && x != 0 {
 					fmt.Println("Time elapsed for 1000 txs in ms: ", time.Since(start2).Milliseconds())
@@ -528,7 +538,7 @@ func GeneratePrivKeyAndSpam() {
 				if x%5 == 0 { // Change to true for all ETXs
 					toAddr = ChooseRandomETXAddress(addrCache, region, from_zone)
 					// Change the params
-					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, big.NewInt(2)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, big.NewInt(2)), Gas: GAS * 2, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
+					inner_tx := types.InternalToExternalTx{ChainID: PARAMS.ChainID, Nonce: 0, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, ETXGasPrice: new(big.Int).Mul(MAXFEE, calcEtxFeeMultiplier(fromAddr, toAddr)), ETXGasLimit: 21000, ETXGasTip: new(big.Int).Mul(MINERTIP, calcEtxFeeMultiplier(fromAddr, toAddr)), Gas: GAS * 3, To: &toAddr, Value: VALUE, Data: nil, AccessList: types.AccessList{}}
 					tx = types.NewTx(&inner_tx)
 				} else {
 					// Change the params

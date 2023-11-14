@@ -16,26 +16,185 @@ import (
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/crypto"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
 	accounts "github.com/dominant-strategies/quai-accounts"
+	"github.com/dominant-strategies/quai-accounts/abi"
 	"github.com/dominant-strategies/quai-accounts/keystore"
 	"github.com/dominant-strategies/tx-spammer/util"
 	"github.com/holiman/uint256"
 )
 
 var (
-	BASEFEE   = big.NewInt(1 * params.GWei)
-	MINERTIP  = big.NewInt(1 * params.GWei)
-	GAS       = uint64(21000)
-	VALUE     = big.NewInt(1111111111111111)
-	PARAMS    = params.GardenChainConfig
+	MAXFEE   = big.NewInt(8 * params.GWei)
+	BASEFEE  = MAXFEE
+	MINERTIP = big.NewInt(4 * params.GWei)
+	GAS      = uint64(21000)
+	VALUE    = big.NewInt(1)
+	// Change the params to the proper chain config
+	PARAMS    = params.Blake3PowLocalChainConfig
 	chainList = []string{"prime", "cyprus", "cyprus1", "cyprus2", "cyprus3", "paxos", "paxos1", "paxos2", "paxos3", "hydra", "hydra1", "hydra2", "hydra3"}
 	from_zone = 0
 	exit      = make(chan bool)
 )
+
+func TestTxStringBytesToDeserializedTx(t *testing.T) {
+	bytes := "0x02f87f82232809850218711a00850430e2340082a4109421fda31d5df101b456a953f3941d26448c6b382e0180c0850218711a00850430e2340082a41080c001a0fd22734b7d06e1696a3c81ae773e60ec3642658e408bb7893b0b05fd89893395a021cba9b8c447ee9bc30d5f51c4c1a70848f4a988268970cb80be10e891a44285"
+	data, err := hexutil.Decode(bytes)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	tx, err := DeserializeTx(data)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Printf("%+v\n", types.GetInnerForTesting(tx))
+}
+
+func TestCoinFlip(t *testing.T) {
+	binary := "60806040526040518060400160405280600181526020017f3100000000000000000000000000000000000000000000000000000000000000815250600090816200004a9190620002f6565b50605a600155678ac7230489e80000600255620186a060035560006004553480156200007557600080fd5b50620003dd565b600081519050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b7f4e487b7100000000000000000000000000000000000000000000000000000000600052602260045260246000fd5b60006002820490506001821680620000fe57607f821691505b602082108103620001145762000113620000b6565b5b50919050565b60008190508160005260206000209050919050565b60006020601f8301049050919050565b600082821b905092915050565b6000600883026200017e7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff826200013f565b6200018a86836200013f565b95508019841693508086168417925050509392505050565b6000819050919050565b6000819050919050565b6000620001d7620001d1620001cb84620001a2565b620001ac565b620001a2565b9050919050565b6000819050919050565b620001f383620001b6565b6200020b6200020282620001de565b8484546200014c565b825550505050565b600090565b6200022262000213565b6200022f818484620001e8565b505050565b5b8181101562000257576200024b60008262000218565b60018101905062000235565b5050565b601f821115620002a65762000270816200011a565b6200027b846200012f565b810160208510156200028b578190505b620002a36200029a856200012f565b83018262000234565b50505b505050565b600082821c905092915050565b6000620002cb60001984600802620002ab565b1980831691505092915050565b6000620002e68383620002b8565b9150826002028217905092915050565b62000301826200007c565b67ffffffffffffffff8111156200031d576200031c62000087565b5b620003298254620000e5565b620003368282856200025b565b600060209050601f8311600181146200036e576000841562000359578287015190505b620003658582620002d8565b865550620003d5565b601f1984166200037e866200011a565b60005b82811015620003a85784890151825560018201915060208501945060208101905062000381565b86831015620003c85784890151620003c4601f891682620002b8565b8355505b6001600288020188555050505b505050505050565b61067780620003ed6000396000f3fe60806040526004361061007f5760003560e01c80636f9fb98a1161004e5780636f9fb98a1461012657806389da2fe6146101515780639619367d1461017c578063affed0e0146101a757610086565b806309247dc51461008b5780631a1df394146100b65780631f85f66e146100d25780632e5b2168146100fb57610086565b3661008657005b600080fd5b34801561009757600080fd5b506100a06101d2565b6040516100ad9190610312565b60405180910390f35b6100d060048036038101906100cb919061036a565b6101d8565b005b3480156100de57600080fd5b506100f960048036038101906100f491906103ff565b610231565b005b34801561010757600080fd5b50610110610251565b60405161011d9190610312565b60405180910390f35b34801561013257600080fd5b5061013b610257565b6040516101489190610312565b60405180910390f35b34801561015d57600080fd5b5061016661025f565b6040516101739190610312565b60405180910390f35b34801561018857600080fd5b50610191610265565b60405161019e9190610312565b60405180910390f35b3480156101b357600080fd5b506101bc61026b565b6040516101c991906104e2565b60405180910390f35b60045481565b3373ffffffffffffffffffffffffffffffffffffffff167f6e5c81ed1b2e553cdd40aeb41e446698f5b0b911b1638ab249c91425a600f15f346001600085604051610226949392919061055f565b60405180910390a250565b82600281905550816003819055508063ffffffff16600181905550505050565b60025481565b600047905090565b60015481565b60035481565b60008054610278906105e6565b80601f01602080910402602001604051908101604052809291908181526020018280546102a4906105e6565b80156102f15780601f106102c6576101008083540402835291602001916102f1565b820191906000526020600020905b8154815290600101906020018083116102d457829003601f168201915b505050505081565b6000819050919050565b61030c816102f9565b82525050565b60006020820190506103276000830184610303565b92915050565b600080fd5b60008115159050919050565b61034781610332565b811461035257600080fd5b50565b6000813590506103648161033e565b92915050565b6000602082840312156103805761037f61032d565b5b600061038e84828501610355565b91505092915050565b6103a0816102f9565b81146103ab57600080fd5b50565b6000813590506103bd81610397565b92915050565b600063ffffffff82169050919050565b6103dc816103c3565b81146103e757600080fd5b50565b6000813590506103f9816103d3565b92915050565b6000806000606084860312156104185761041761032d565b5b6000610426868287016103ae565b9350506020610437868287016103ae565b9250506040610448868287016103ea565b9150509250925092565b600081519050919050565b600082825260208201905092915050565b60005b8381101561048c578082015181840152602081019050610471565b60008484015250505050565b6000601f19601f8301169050919050565b60006104b482610452565b6104be818561045d565b93506104ce81856020860161046e565b6104d781610498565b840191505092915050565b600060208201905081810360008301526104fc81846104a9565b905092915050565b7f436f6e67726174732c20796f752063686f736520636f72726563746c792e0000600082015250565b600061053a601e8361045d565b915061054582610504565b602082019050919050565b61055981610332565b82525050565b600060a08201905081810360008301526105788161052d565b90506105876020830187610303565b6105946040830186610550565b6105a16060830185610550565b6105ae6080830184610550565b95945050505050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052602260045260246000fd5b600060028204905060018216806105fe57607f821691505b602082108103610611576106106105b7565b5b5091905056fea264697066735822122000d5a02e27ebad9a92eb5f7a86bff23718d24cc43801031aaa362bf07bd9403364736f6c63782c302e382e31382d646576656c6f702e323032322e31312e382b636f6d6d69742e36306161353861362e6d6f64005d"
+	config, err := util.LoadConfig(".")
+	if err != nil {
+		fmt.Println("cannot load config: " + err.Error())
+		return
+	}
+	allClients := getNodeClients(config)
+	region := 0
+	from_zone := 0
+	if !allClients.zonesAvailable[region][from_zone] {
+		return
+	}
+	client := allClients.zoneClients[region][from_zone] // cyprus 1 node client
+	signer := types.LatestSigner(PARAMS)
+	fromAddr := common.HexToAddress("0x1902f834DFB6eC9421783E6333eD99faC9430dc2")
+	fromPrivKey, err := crypto.ToECDSA(common.FromHex("0xfd939091534d5c7ac4870d838844064f6beb2cc28ad0ece963db644b33713dc0"))
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	common.NodeLocation = *fromAddr.Location()
+	nonce, err := client.PendingNonceAt(context.Background(), fromAddr)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	// Check balance
+	balance, err := client.BalanceAt(context.Background(), fromAddr, nil)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("Balance of %s: %s\n", fromAddr.String(), balance.String())
+
+	contract, err := hex.DecodeString(binary)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	x := uint8(0)
+	index := len(contract) - 1
+	indexFound := false
+	var contractAddr common.Address
+	contractNonce := []byte{49, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00}
+	// Grind contract address
+	for i := 0; i < len(contract); i++ {
+		j := i
+		for x := 0; x < len(contractNonce); x++ {
+			if contract[j] == contractNonce[x] && x == len(contractNonce)-1 {
+				index = j
+				indexFound = true
+				break
+			} else if contract[j] != contractNonce[x] {
+				break
+			} else if contract[j] == contractNonce[x] {
+				j++
+			}
+		}
+		if indexFound {
+			break
+		}
+	}
+	for {
+		contract[index] = x
+		contractAddr = crypto.CreateAddress(fromAddr, nonce, contract)
+		if common.IsInChainScope(contractAddr.Bytes()) {
+			break
+		}
+		x++
+	}
+	// Construct deployment tx
+	inner_tx := types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: 4000000, To: nil, Value: common.Big0, Data: contract}
+	tx, err := types.SignTx(types.NewTx(&inner_tx), signer, fromPrivKey)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	err = client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	time.Sleep(5 * time.Second)
+	sig := crypto.Keccak256([]byte("Play(bool)"))[:4]
+	playerChoice := uint256.NewInt(1)
+	data := make([]byte, 0, 0)
+	data = append(data, sig...)
+	temp := playerChoice.Bytes32()
+	data = append(data, temp[:]...)
+	inner_tx = types.InternalTx{ChainID: PARAMS.ChainID, Nonce: nonce + 1, GasTipCap: MINERTIP, GasFeeCap: MAXFEE, Gas: 1000000, To: &contractAddr, Value: common.Big0, Data: data}
+	tx, err = types.SignTx(types.NewTx(&inner_tx), signer, fromPrivKey)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	err = client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	time.Sleep(5 * time.Second)
+	receipt, err := client.TransactionReceipt(context.Background(), tx.Hash())
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("%+v\n", *receipt)
+	fmt.Println(receipt.Logs[0].Data)
+	fmt.Println(hexutil.Encode(receipt.Logs[0].Data))
+	vm.WriteLogs(os.Stdout, receipt.Logs)
+	file, err := os.Open("abi.json")
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	contractAbi, err := abi.JSON(file)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	unpacked, err := contractAbi.Unpack("Status", receipt.Logs[0].Data)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	fmt.Printf("%+v\n", unpacked)
+}
+
+func DeserializeTx(data []byte) (*types.Transaction, error) {
+	var tx types.Transaction
+	err := tx.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+	return &tx, nil
+}
 
 func TestGenerateAddresses(t *testing.T) {
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".test", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
